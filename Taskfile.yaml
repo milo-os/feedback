@@ -1,0 +1,71 @@
+version: '3'
+
+vars:
+  TOOL_DIR: "{{.USER_WORKING_DIR}}/bin"
+  IMAGE_NAME: "ghcr.io/milo-os/feedback"
+  IMAGE_TAG: "dev"
+  MODULE: "go.miloapis.com/feedback"
+
+tasks:
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build the feedback binary
+    cmds:
+      - |
+        set -e
+        mkdir -p {{.TOOL_DIR}}
+        GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        VERSION="v0.0.0-dev+${GIT_COMMIT:0:7}"
+        GIT_TREE_STATE="clean"
+        if [ -n "$(git status --porcelain 2>/dev/null)" ]; then GIT_TREE_STATE="dirty"; fi
+        BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+        go build \
+          -ldflags="-X '{{.MODULE}}/internal/version.Version=${VERSION}' \
+                    -X '{{.MODULE}}/internal/version.GitCommit=${GIT_COMMIT}' \
+                    -X '{{.MODULE}}/internal/version.GitTreeState=${GIT_TREE_STATE}' \
+                    -X '{{.MODULE}}/internal/version.BuildDate=${BUILD_DATE}'" \
+          -o {{.TOOL_DIR}}/feedback ./cmd/feedback
+        echo "Built {{.TOOL_DIR}}/feedback"
+    silent: true
+
+  generate:
+    desc: Generate deepcopy, clientset and OpenAPI code
+    cmds:
+      - ./hack/update-codegen.sh
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./... {{.CLI_ARGS}}
+
+  docker-build:
+    desc: Build the container image
+    cmds:
+      - |
+        GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        docker build \
+          --build-arg VERSION=v0.0.0-dev+${GIT_COMMIT:0:7} \
+          --build-arg GIT_COMMIT=${GIT_COMMIT} \
+          --build-arg BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ') \
+          -t {{.IMAGE_NAME}}:{{.IMAGE_TAG}} .
+
+  kustomize-build:
+    desc: Render the kustomize configuration
+    cmds:
+      - kustomize build config/base > /dev/null
+      - kustomize build config/overlays/core-control-plane > /dev/null

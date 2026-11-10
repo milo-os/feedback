@@ -1,0 +1,181 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feedback-apiserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: feedback-apiserver
+  template:
+    metadata:
+      labels:
+        app: feedback-apiserver
+    spec:
+      serviceAccountName: feedback-apiserver
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      # Migrations are forward-only and applied before the server starts.
+      # goose takes a Postgres session lock, so replicas don't race.
+      initContainers:
+      - name: migrate
+        image: ghcr.io/milo-os/feedback:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+          capabilities:
+            drop:
+            - ALL
+        command:
+        - /feedback
+        - migrate
+        env:
+        - name: FEEDBACK_POSTGRES_DSN
+          valueFrom:
+            secretKeyRef:
+              name: feedback-postgres
+              key: dsn
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      containers:
+      - name: apiserver
+        image: ghcr.io/milo-os/feedback:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        command:
+        - /feedback
+        - serve
+        args:
+        - --secure-port=$(SECURE_PORT)
+        - --tls-cert-file=$(TLS_CERT_FILE)
+        - --tls-private-key-file=$(TLS_PRIVATE_KEY_FILE)
+        - --kubeconfig=$(KUBECONFIG)
+        - --authentication-kubeconfig=$(AUTHENTICATION_KUBECONFIG)
+        - --authentication-skip-lookup=$(AUTHENTICATION_SKIP_LOOKUP)
+        - --authentication-tolerate-lookup-failure=$(AUTHENTICATION_TOLERATE_LOOKUP_FAILURE)
+        - --authorization-kubeconfig=$(AUTHORIZATION_KUBECONFIG)
+        - --authorization-always-allow-paths=$(AUTHORIZATION_ALWAYS_ALLOW_PATHS)
+        - --requestheader-client-ca-file=$(REQUESTHEADER_CLIENT_CA_FILE)
+        - --requestheader-username-headers=$(REQUESTHEADER_USERNAME_HEADERS)
+        - --requestheader-group-headers=$(REQUESTHEADER_GROUP_HEADERS)
+        - --requestheader-uid-headers=$(REQUESTHEADER_UID_HEADERS)
+        - --requestheader-extra-headers-prefix=$(REQUESTHEADER_EXTRA_HEADERS_PREFIX)
+        - --logging-format=$(LOGGING_FORMAT)
+        - --tracing-config-file=$(TRACING_CONFIG_FILE)
+        - --v=$(LOG_LEVEL)
+        - --etcd-servers=$(ETCD_SERVERS)
+        env:
+        - name: ETCD_SERVERS
+          value: "http://etcd.etcd-system.svc.cluster.local:2379"
+        - name: SECURE_PORT
+          value: "8443"
+        - name: TLS_CERT_FILE
+          value: "/var/run/feedback-apiserver/tls/tls.crt"
+        - name: TLS_PRIVATE_KEY_FILE
+          value: "/var/run/feedback-apiserver/tls/tls.key"
+        - name: KUBECONFIG
+          value: ""
+        - name: AUTHENTICATION_KUBECONFIG
+          value: ""
+        - name: AUTHENTICATION_SKIP_LOOKUP
+          value: "false"
+        - name: AUTHENTICATION_TOLERATE_LOOKUP_FAILURE
+          value: "false"
+        - name: AUTHORIZATION_KUBECONFIG
+          value: ""
+        - name: AUTHORIZATION_ALWAYS_ALLOW_PATHS
+          value: "/healthz,/readyz,/livez"
+        - name: REQUESTHEADER_CLIENT_CA_FILE
+          value: ""
+        - name: REQUESTHEADER_USERNAME_HEADERS
+          value: "X-Remote-User"
+        - name: REQUESTHEADER_GROUP_HEADERS
+          value: "X-Remote-Group"
+        - name: REQUESTHEADER_UID_HEADERS
+          value: "X-Remote-Uid"
+        - name: REQUESTHEADER_EXTRA_HEADERS_PREFIX
+          value: "X-Remote-Extra-"
+        - name: LOGGING_FORMAT
+          value: "json"
+        - name: LOG_LEVEL
+          value: "4"
+        - name: TRACING_CONFIG_FILE
+          value: ""
+        - name: FEEDBACK_POSTGRES_DSN
+          valueFrom:
+            secretKeyRef:
+              name: feedback-postgres
+              key: dsn
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /var/run/feedback-apiserver/tls
+          readOnly: true
+        - name: control-plane-ca
+          mountPath: /etc/kubernetes/pki/requestheader
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tls-certs
+        csi:
+          driver: csi.cert-manager.io
+          readOnly: true
+          volumeAttributes:
+            csi.cert-manager.io/issuer-name: selfsigned-cluster-issuer
+            csi.cert-manager.io/issuer-kind: ClusterIssuer
+            csi.cert-manager.io/common-name: feedback-apiserver.feedback-system.svc
+            csi.cert-manager.io/dns-names: "feedback-apiserver,feedback-apiserver.feedback-system,feedback-apiserver.feedback-system.svc,feedback-apiserver.feedback-system.svc.cluster.local"
+            csi.cert-manager.io/duration: "8760h"
+            csi.cert-manager.io/renew-before: "720h"
+            csi.cert-manager.io/fs-group: "65532"
+      - name: control-plane-ca
+        configMap:
+          name: control-plane-ca
+          optional: true
+      - name: tmp
+        emptyDir: {}

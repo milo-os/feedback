@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: feedback-system
+
+resources:
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - rbac-auth-reader.yaml
+  - rbac-cluster.yaml
+
+labels:
+  - includeSelectors: true
+    includeTemplates: true
+    pairs:
+      app.kubernetes.io/name: feedback-apiserver
+      app.kubernetes.io/instance: feedback-apiserver
+      app.kubernetes.io/component: apiserver
+      app.kubernetes.io/part-of: feedback.miloapis.com
+      app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: ghcr.io/milo-os/feedback
+    newTag: latest
+
+# Keep the auth-reader RoleBinding in kube-system.
+patches:
+  - target:
+      kind: RoleBinding
+      name: feedback-apiserver-auth-reader
+    patch: |-
+      - op: replace
+        path: /metadata/namespace
+        value: kube-system
+      - op: replace
+        path: /subjects/0/namespace
+        value: feedback-system

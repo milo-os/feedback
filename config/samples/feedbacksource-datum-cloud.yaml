@@ -1,0 +1,39 @@
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: FeedbackSource
+metadata:
+  name: datum-cloud
+spec:
+  github:
+    org: datum-cloud
+    installationID: 12345678
+    repositories:
+      include: ["*"]
+      exclude: ["infra", "staff-portal"]
+    issues:
+      issueTypes: ["Enhancement", "Feedback", "Bug"]
+      labels: ["Build", "Deliver", "Connect", "Platform Features"]
+      excludeLabels: ["feedback:hide"]
+    project:
+      owner: datum-cloud
+      number: 22
+      statusField: Status
+      votesField: Votes
+    milestones:
+      repository: enhancements
+    changelog:
+      repository: datum
+      discussionCategory: changelog
+  statusMapping:
+    "": none
+    "Backlog": backlog
+    "Planning": planning
+    "On Deck": on-deck
+    "In Progress": in-progress
+    "Done": shipped
+  categoryMapping:
+    "Build": build
+    "Deliver": deliver
+    "Connect": connect
+    "Platform Features": platform
+    "Infrastructure": infrastructure
+    "AX/DX/UX": experience

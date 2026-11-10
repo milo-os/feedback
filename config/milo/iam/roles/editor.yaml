@@ -1,0 +1,17 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: feedback.miloapis.com-editor
+  namespace: milo-system
+  labels:
+    app.kubernetes.io/name: editor
+    app.kubernetes.io/part-of: feedback.miloapis.com
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: feedback.miloapis.com-viewer
+      namespace: milo-system
+  includedPermissions:
+    - feedback.miloapis.com/feedbacksources.create
+    - feedback.miloapis.com/feedbacksources.update
+    - feedback.miloapis.com/feedbacksources.patch

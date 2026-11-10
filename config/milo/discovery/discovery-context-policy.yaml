@@ -1,0 +1,11 @@
+apiVersion: discovery.miloapis.com/v1alpha1
+kind: DiscoveryContextPolicy
+metadata:
+  name: feedback-service
+spec:
+  rules:
+    # FeedbackSource is staff configuration. User-context resources (Vote,
+    # Submission, Subscription, ...) get their own rules as they are added.
+    - group: feedback.miloapis.com
+      resources: ["feedbacksources"]
+      contexts: ["Platform"]

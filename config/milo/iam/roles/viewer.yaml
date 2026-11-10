@@ -1,0 +1,15 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: feedback.miloapis.com-viewer
+  namespace: milo-system
+  labels:
+    app.kubernetes.io/name: viewer
+    app.kubernetes.io/part-of: feedback.miloapis.com
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - feedback.miloapis.com/feedbacksources.get
+    - feedback.miloapis.com/feedbacksources.list
+    - feedback.miloapis.com/feedbacksources.watch
+    - feedback.miloapis.com/feedbacksources/status.get
