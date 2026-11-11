@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: feedback-apiserver
+spec:
+  type: ClusterIP
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8443
+    protocol: TCP
+  selector:
+    app: feedback-apiserver

@@ -1,0 +1,36 @@
+name: "Verify Generated Code"
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)) }}
+
+jobs:
+  verify-generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run task generate
+        env:
+          TASK_X_REMOTE_TASKFILES: 1
+        run: task generate
+
+      - name: Check for diffs
+        run: |
+          git diff --exit-code || (echo "❌ Generated code is out of sync. Please run 'task generate' and commit the changes." && exit 1)
