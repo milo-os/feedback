@@ -16,73 +16,563 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogSource":      schema_pkg_apis_feedback_v1alpha1_ChangelogSource(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.FeedbackSource":       schema_pkg_apis_feedback_v1alpha1_FeedbackSource(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.FeedbackSourceList":   schema_pkg_apis_feedback_v1alpha1_FeedbackSourceList(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.FeedbackSourceSpec":   schema_pkg_apis_feedback_v1alpha1_FeedbackSourceSpec(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.FeedbackSourceStatus": schema_pkg_apis_feedback_v1alpha1_FeedbackSourceStatus(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubSource":         schema_pkg_apis_feedback_v1alpha1_GitHubSource(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.IssueSelector":        schema_pkg_apis_feedback_v1alpha1_IssueSelector(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.MilestoneSource":      schema_pkg_apis_feedback_v1alpha1_MilestoneSource(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ProjectRef":           schema_pkg_apis_feedback_v1alpha1_ProjectRef(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.RateLimitStatus":      schema_pkg_apis_feedback_v1alpha1_RateLimitStatus(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ReconcileStatus":      schema_pkg_apis_feedback_v1alpha1_ReconcileStatus(ref),
-		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.RepositorySelector":   schema_pkg_apis_feedback_v1alpha1_RepositorySelector(ref),
-		resource.Quantity{}.OpenAPIModelName():                                     schema_apimachinery_pkg_api_resource_Quantity(ref),
-		v1.APIGroup{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_APIGroup(ref),
-		v1.APIGroupList{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_APIGroupList(ref),
-		v1.APIResource{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_APIResource(ref),
-		v1.APIResourceList{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_APIResourceList(ref),
-		v1.APIVersions{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_APIVersions(ref),
-		v1.ApplyOptions{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_ApplyOptions(ref),
-		v1.Condition{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_Condition(ref),
-		v1.CreateOptions{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_CreateOptions(ref),
-		v1.DeleteOptions{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_DeleteOptions(ref),
-		v1.Duration{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_Duration(ref),
-		v1.FieldSelectorRequirement{}.OpenAPIModelName():                           schema_pkg_apis_meta_v1_FieldSelectorRequirement(ref),
-		v1.FieldsV1{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_FieldsV1(ref),
-		v1.GetOptions{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_GetOptions(ref),
-		v1.GroupKind{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_GroupKind(ref),
-		v1.GroupResource{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_GroupResource(ref),
-		v1.GroupVersion{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_GroupVersion(ref),
-		v1.GroupVersionForDiscovery{}.OpenAPIModelName():                           schema_pkg_apis_meta_v1_GroupVersionForDiscovery(ref),
-		v1.GroupVersionKind{}.OpenAPIModelName():                                   schema_pkg_apis_meta_v1_GroupVersionKind(ref),
-		v1.GroupVersionResource{}.OpenAPIModelName():                               schema_pkg_apis_meta_v1_GroupVersionResource(ref),
-		v1.InternalEvent{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_InternalEvent(ref),
-		v1.LabelSelector{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_LabelSelector(ref),
-		v1.LabelSelectorRequirement{}.OpenAPIModelName():                           schema_pkg_apis_meta_v1_LabelSelectorRequirement(ref),
-		v1.List{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_List(ref),
-		v1.ListMeta{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_ListMeta(ref),
-		v1.ListOptions{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_ListOptions(ref),
-		v1.ManagedFieldsEntry{}.OpenAPIModelName():                                 schema_pkg_apis_meta_v1_ManagedFieldsEntry(ref),
-		v1.MicroTime{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_MicroTime(ref),
-		v1.ObjectMeta{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_ObjectMeta(ref),
-		v1.OwnerReference{}.OpenAPIModelName():                                     schema_pkg_apis_meta_v1_OwnerReference(ref),
-		v1.PartialObjectMetadata{}.OpenAPIModelName():                              schema_pkg_apis_meta_v1_PartialObjectMetadata(ref),
-		v1.PartialObjectMetadataList{}.OpenAPIModelName():                          schema_pkg_apis_meta_v1_PartialObjectMetadataList(ref),
-		v1.Patch{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_Patch(ref),
-		v1.PatchOptions{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_PatchOptions(ref),
-		v1.Preconditions{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_Preconditions(ref),
-		v1.RootPaths{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_RootPaths(ref),
-		v1.ServerAddressByClientCIDR{}.OpenAPIModelName():                          schema_pkg_apis_meta_v1_ServerAddressByClientCIDR(ref),
-		v1.ShardInfo{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_ShardInfo(ref),
-		v1.Status{}.OpenAPIModelName():                                             schema_pkg_apis_meta_v1_Status(ref),
-		v1.StatusCause{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_StatusCause(ref),
-		v1.StatusDetails{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_StatusDetails(ref),
-		v1.Table{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_Table(ref),
-		v1.TableColumnDefinition{}.OpenAPIModelName():                              schema_pkg_apis_meta_v1_TableColumnDefinition(ref),
-		v1.TableOptions{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_TableOptions(ref),
-		v1.TableRow{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_TableRow(ref),
-		v1.TableRowCondition{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_TableRowCondition(ref),
-		v1.Time{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_Time(ref),
-		v1.Timestamp{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_Timestamp(ref),
-		v1.TypeMeta{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_TypeMeta(ref),
-		v1.UpdateOptions{}.OpenAPIModelName():                                      schema_pkg_apis_meta_v1_UpdateOptions(ref),
-		v1.WatchEvent{}.OpenAPIModelName():                                         schema_pkg_apis_meta_v1_WatchEvent(ref),
-		runtime.RawExtension{}.OpenAPIModelName():                                  schema_k8sio_apimachinery_pkg_runtime_RawExtension(ref),
-		runtime.TypeMeta{}.OpenAPIModelName():                                      schema_k8sio_apimachinery_pkg_runtime_TypeMeta(ref),
-		runtime.Unknown{}.OpenAPIModelName():                                       schema_k8sio_apimachinery_pkg_runtime_Unknown(ref),
-		version.Info{}.OpenAPIModelName():                                          schema_k8sio_apimachinery_pkg_version_Info(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentReference":           schema_pkg_apis_feedback_v1alpha1_AttachmentReference(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUpload":              schema_pkg_apis_feedback_v1alpha1_AttachmentUpload(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUploadList":          schema_pkg_apis_feedback_v1alpha1_AttachmentUploadList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUploadSpec":          schema_pkg_apis_feedback_v1alpha1_AttachmentUploadSpec(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUploadStatus":        schema_pkg_apis_feedback_v1alpha1_AttachmentUploadStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogEntry":                schema_pkg_apis_feedback_v1alpha1_ChangelogEntry(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogEntryList":            schema_pkg_apis_feedback_v1alpha1_ChangelogEntryList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogEntryStatus":          schema_pkg_apis_feedback_v1alpha1_ChangelogEntryStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogReactions":            schema_pkg_apis_feedback_v1alpha1_ChangelogReactions(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogSource":               schema_pkg_apis_feedback_v1alpha1_ChangelogSource(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.CreditGrantReference":          schema_pkg_apis_feedback_v1alpha1_CreditGrantReference(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DeliveryEvent":                 schema_pkg_apis_feedback_v1alpha1_DeliveryEvent(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DeliveryStatus":                schema_pkg_apis_feedback_v1alpha1_DeliveryStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DeliveryWork":                  schema_pkg_apis_feedback_v1alpha1_DeliveryWork(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DraftIssue":                    schema_pkg_apis_feedback_v1alpha1_DraftIssue(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ExternalReporter":              schema_pkg_apis_feedback_v1alpha1_ExternalReporter(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.FeedbackSource":                schema_pkg_apis_feedback_v1alpha1_FeedbackSource(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.FeedbackSourceList":            schema_pkg_apis_feedback_v1alpha1_FeedbackSourceList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.FeedbackSourceSpec":            schema_pkg_apis_feedback_v1alpha1_FeedbackSourceSpec(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.FeedbackSourceStatus":          schema_pkg_apis_feedback_v1alpha1_FeedbackSourceStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubIssue":                   schema_pkg_apis_feedback_v1alpha1_GitHubIssue(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubLink":                    schema_pkg_apis_feedback_v1alpha1_GitHubLink(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubSource":                  schema_pkg_apis_feedback_v1alpha1_GitHubSource(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.IssueSelector":                 schema_pkg_apis_feedback_v1alpha1_IssueSelector(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.MilestoneSource":               schema_pkg_apis_feedback_v1alpha1_MilestoneSource(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PartShipped":                   schema_pkg_apis_feedback_v1alpha1_PartShipped(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Post":                          schema_pkg_apis_feedback_v1alpha1_Post(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostList":                      schema_pkg_apis_feedback_v1alpha1_PostList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQuery":                     schema_pkg_apis_feedback_v1alpha1_PostQuery(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryFilter":               schema_pkg_apis_feedback_v1alpha1_PostQueryFilter(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryList":                 schema_pkg_apis_feedback_v1alpha1_PostQueryList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryResult":               schema_pkg_apis_feedback_v1alpha1_PostQueryResult(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQuerySpec":                 schema_pkg_apis_feedback_v1alpha1_PostQuerySpec(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryStatus":               schema_pkg_apis_feedback_v1alpha1_PostQueryStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostReference":                 schema_pkg_apis_feedback_v1alpha1_PostReference(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostSpec":                      schema_pkg_apis_feedback_v1alpha1_PostSpec(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostStatus":                    schema_pkg_apis_feedback_v1alpha1_PostStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostVotes":                     schema_pkg_apis_feedback_v1alpha1_PostVotes(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ProjectRef":                    schema_pkg_apis_feedback_v1alpha1_ProjectRef(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PublicVoter":                   schema_pkg_apis_feedback_v1alpha1_PublicVoter(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PullRequestRef":                schema_pkg_apis_feedback_v1alpha1_PullRequestRef(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.RateLimitStatus":               schema_pkg_apis_feedback_v1alpha1_RateLimitStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ReconcileStatus":               schema_pkg_apis_feedback_v1alpha1_ReconcileStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Release":                       schema_pkg_apis_feedback_v1alpha1_Release(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ReleaseList":                   schema_pkg_apis_feedback_v1alpha1_ReleaseList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ReleaseStatus":                 schema_pkg_apis_feedback_v1alpha1_ReleaseStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.RepositorySelector":            schema_pkg_apis_feedback_v1alpha1_RepositorySelector(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAcknowledgement":       schema_pkg_apis_feedback_v1alpha1_SecurityAcknowledgement(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAcknowledgementList":   schema_pkg_apis_feedback_v1alpha1_SecurityAcknowledgementList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAcknowledgementStatus": schema_pkg_apis_feedback_v1alpha1_SecurityAcknowledgementStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAdvisory":              schema_pkg_apis_feedback_v1alpha1_SecurityAdvisory(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityCredit":                schema_pkg_apis_feedback_v1alpha1_SecurityCredit(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReport":                schema_pkg_apis_feedback_v1alpha1_SecurityReport(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportContext":         schema_pkg_apis_feedback_v1alpha1_SecurityReportContext(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportInternal":        schema_pkg_apis_feedback_v1alpha1_SecurityReportInternal(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportList":            schema_pkg_apis_feedback_v1alpha1_SecurityReportList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportSpec":            schema_pkg_apis_feedback_v1alpha1_SecurityReportSpec(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportStatus":          schema_pkg_apis_feedback_v1alpha1_SecurityReportStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReward":                schema_pkg_apis_feedback_v1alpha1_SecurityReward(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityTimelineEntry":         schema_pkg_apis_feedback_v1alpha1_SecurityTimelineEntry(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SimilarPost":                   schema_pkg_apis_feedback_v1alpha1_SimilarPost(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Submission":                    schema_pkg_apis_feedback_v1alpha1_Submission(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionContext":             schema_pkg_apis_feedback_v1alpha1_SubmissionContext(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionList":                schema_pkg_apis_feedback_v1alpha1_SubmissionList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionReview":              schema_pkg_apis_feedback_v1alpha1_SubmissionReview(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionReviewOutcome":       schema_pkg_apis_feedback_v1alpha1_SubmissionReviewOutcome(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionReviewSpec":          schema_pkg_apis_feedback_v1alpha1_SubmissionReviewSpec(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionSpec":                schema_pkg_apis_feedback_v1alpha1_SubmissionSpec(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionStatus":              schema_pkg_apis_feedback_v1alpha1_SubmissionStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionToSecurityReport":    schema_pkg_apis_feedback_v1alpha1_SubmissionToSecurityReport(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionTriage":              schema_pkg_apis_feedback_v1alpha1_SubmissionTriage(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Subscription":                  schema_pkg_apis_feedback_v1alpha1_Subscription(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubscriptionList":              schema_pkg_apis_feedback_v1alpha1_SubscriptionList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubscriptionSpec":              schema_pkg_apis_feedback_v1alpha1_SubscriptionSpec(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Vote":                          schema_pkg_apis_feedback_v1alpha1_Vote(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.VoteList":                      schema_pkg_apis_feedback_v1alpha1_VoteList(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.VoteSpec":                      schema_pkg_apis_feedback_v1alpha1_VoteSpec(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.VoteStatus":                    schema_pkg_apis_feedback_v1alpha1_VoteStatus(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.WorkItem":                      schema_pkg_apis_feedback_v1alpha1_WorkItem(ref),
+		resource.Quantity{}.OpenAPIModelName():                                              schema_apimachinery_pkg_api_resource_Quantity(ref),
+		v1.APIGroup{}.OpenAPIModelName():                                                    schema_pkg_apis_meta_v1_APIGroup(ref),
+		v1.APIGroupList{}.OpenAPIModelName():                                                schema_pkg_apis_meta_v1_APIGroupList(ref),
+		v1.APIResource{}.OpenAPIModelName():                                                 schema_pkg_apis_meta_v1_APIResource(ref),
+		v1.APIResourceList{}.OpenAPIModelName():                                             schema_pkg_apis_meta_v1_APIResourceList(ref),
+		v1.APIVersions{}.OpenAPIModelName():                                                 schema_pkg_apis_meta_v1_APIVersions(ref),
+		v1.ApplyOptions{}.OpenAPIModelName():                                                schema_pkg_apis_meta_v1_ApplyOptions(ref),
+		v1.Condition{}.OpenAPIModelName():                                                   schema_pkg_apis_meta_v1_Condition(ref),
+		v1.CreateOptions{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_CreateOptions(ref),
+		v1.DeleteOptions{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_DeleteOptions(ref),
+		v1.Duration{}.OpenAPIModelName():                                                    schema_pkg_apis_meta_v1_Duration(ref),
+		v1.FieldSelectorRequirement{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_FieldSelectorRequirement(ref),
+		v1.FieldsV1{}.OpenAPIModelName():                                                    schema_pkg_apis_meta_v1_FieldsV1(ref),
+		v1.GetOptions{}.OpenAPIModelName():                                                  schema_pkg_apis_meta_v1_GetOptions(ref),
+		v1.GroupKind{}.OpenAPIModelName():                                                   schema_pkg_apis_meta_v1_GroupKind(ref),
+		v1.GroupResource{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_GroupResource(ref),
+		v1.GroupVersion{}.OpenAPIModelName():                                                schema_pkg_apis_meta_v1_GroupVersion(ref),
+		v1.GroupVersionForDiscovery{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_GroupVersionForDiscovery(ref),
+		v1.GroupVersionKind{}.OpenAPIModelName():                                            schema_pkg_apis_meta_v1_GroupVersionKind(ref),
+		v1.GroupVersionResource{}.OpenAPIModelName():                                        schema_pkg_apis_meta_v1_GroupVersionResource(ref),
+		v1.InternalEvent{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_InternalEvent(ref),
+		v1.LabelSelector{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_LabelSelector(ref),
+		v1.LabelSelectorRequirement{}.OpenAPIModelName():                                    schema_pkg_apis_meta_v1_LabelSelectorRequirement(ref),
+		v1.List{}.OpenAPIModelName():                                                        schema_pkg_apis_meta_v1_List(ref),
+		v1.ListMeta{}.OpenAPIModelName():                                                    schema_pkg_apis_meta_v1_ListMeta(ref),
+		v1.ListOptions{}.OpenAPIModelName():                                                 schema_pkg_apis_meta_v1_ListOptions(ref),
+		v1.ManagedFieldsEntry{}.OpenAPIModelName():                                          schema_pkg_apis_meta_v1_ManagedFieldsEntry(ref),
+		v1.MicroTime{}.OpenAPIModelName():                                                   schema_pkg_apis_meta_v1_MicroTime(ref),
+		v1.ObjectMeta{}.OpenAPIModelName():                                                  schema_pkg_apis_meta_v1_ObjectMeta(ref),
+		v1.OwnerReference{}.OpenAPIModelName():                                              schema_pkg_apis_meta_v1_OwnerReference(ref),
+		v1.PartialObjectMetadata{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_PartialObjectMetadata(ref),
+		v1.PartialObjectMetadataList{}.OpenAPIModelName():                                   schema_pkg_apis_meta_v1_PartialObjectMetadataList(ref),
+		v1.Patch{}.OpenAPIModelName():                                                       schema_pkg_apis_meta_v1_Patch(ref),
+		v1.PatchOptions{}.OpenAPIModelName():                                                schema_pkg_apis_meta_v1_PatchOptions(ref),
+		v1.Preconditions{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_Preconditions(ref),
+		v1.RootPaths{}.OpenAPIModelName():                                                   schema_pkg_apis_meta_v1_RootPaths(ref),
+		v1.ServerAddressByClientCIDR{}.OpenAPIModelName():                                   schema_pkg_apis_meta_v1_ServerAddressByClientCIDR(ref),
+		v1.ShardInfo{}.OpenAPIModelName():                                                   schema_pkg_apis_meta_v1_ShardInfo(ref),
+		v1.Status{}.OpenAPIModelName():                                                      schema_pkg_apis_meta_v1_Status(ref),
+		v1.StatusCause{}.OpenAPIModelName():                                                 schema_pkg_apis_meta_v1_StatusCause(ref),
+		v1.StatusDetails{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_StatusDetails(ref),
+		v1.Table{}.OpenAPIModelName():                                                       schema_pkg_apis_meta_v1_Table(ref),
+		v1.TableColumnDefinition{}.OpenAPIModelName():                                       schema_pkg_apis_meta_v1_TableColumnDefinition(ref),
+		v1.TableOptions{}.OpenAPIModelName():                                                schema_pkg_apis_meta_v1_TableOptions(ref),
+		v1.TableRow{}.OpenAPIModelName():                                                    schema_pkg_apis_meta_v1_TableRow(ref),
+		v1.TableRowCondition{}.OpenAPIModelName():                                           schema_pkg_apis_meta_v1_TableRowCondition(ref),
+		v1.Time{}.OpenAPIModelName():                                                        schema_pkg_apis_meta_v1_Time(ref),
+		v1.Timestamp{}.OpenAPIModelName():                                                   schema_pkg_apis_meta_v1_Timestamp(ref),
+		v1.TypeMeta{}.OpenAPIModelName():                                                    schema_pkg_apis_meta_v1_TypeMeta(ref),
+		v1.UpdateOptions{}.OpenAPIModelName():                                               schema_pkg_apis_meta_v1_UpdateOptions(ref),
+		v1.WatchEvent{}.OpenAPIModelName():                                                  schema_pkg_apis_meta_v1_WatchEvent(ref),
+		runtime.RawExtension{}.OpenAPIModelName():                                           schema_k8sio_apimachinery_pkg_runtime_RawExtension(ref),
+		runtime.TypeMeta{}.OpenAPIModelName():                                               schema_k8sio_apimachinery_pkg_runtime_TypeMeta(ref),
+		runtime.Unknown{}.OpenAPIModelName():                                                schema_k8sio_apimachinery_pkg_runtime_Unknown(ref),
+		version.Info{}.OpenAPIModelName():                                                   schema_k8sio_apimachinery_pkg_version_Info(ref),
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_AttachmentReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AttachmentReference points at a file uploaded with an AttachmentUpload.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the file name shown to reviewers.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"contentType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContentType is the file's media type.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"uploadRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UploadRef is status.uploadRef from the AttachmentUpload.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name", "uploadRef"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_AttachmentUpload(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AttachmentUpload stores a file in private object storage and returns a reference to use in a Submission or SecurityReport. Create it in the user context before creating the resource that uses it. It is not stored as an API object; the file is only served back to its uploader and staff (or the Security Team, for security reports).\n\nThe design proposed attachments subresources on submissions and security reports, but a subresource needs its parent to exist first. Uploads happen before the parent is created, so they are a create-only resource instead.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUploadSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUploadStatus"),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUploadSpec", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUploadStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_AttachmentUploadList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AttachmentUploadList is required by the API machinery; uploads cannot be listed.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUpload"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUpload", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_AttachmentUploadSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AttachmentUploadSpec is the file.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"purpose": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"SecurityReport\"`\n - `\"Submission\"`",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"SecurityReport", "Submission"},
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the file name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"contentType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContentType must be an allowed type, e.g. image/png or text/plain.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"data": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Data is the file content, base64-encoded in JSON. Size limits apply.",
+							Type:        []string{"string"},
+							Format:      "byte",
+						},
+					},
+				},
+				Required: []string{"purpose", "name", "contentType", "data"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_AttachmentUploadStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AttachmentUploadStatus identifies the stored file.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"uploadRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UploadRef goes in AttachmentReference.uploadRef.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"size": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int64",
+						},
+					},
+					"sha256": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SHA256 is the hex digest of the content.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_ChangelogEntry(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ChangelogEntry maps to a discussion in the FeedbackSource's changelog category. Only feedback-sync writes entries; everyone can read them.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogEntryStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogEntryStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_ChangelogEntryList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ChangelogEntryList is a list of ChangelogEntry.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogEntry"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogEntry", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_ChangelogEntryStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ChangelogEntryStatus is synced from the discussion.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"title": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"publishedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"categories": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Categories are mapped from discussion labels.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"bodyHTML": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BodyHTML is the discussion body, sanitised like post bodies.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"posts": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Posts are the names of posts referenced in the body.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"issueRefs": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "IssueRefs are every issue referenced in the body, as \"<org>/<repo>#<number>\". A reference to a post's work item rather than the post marks that post part-shipped.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"reactions": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogReactions"),
+						},
+					},
+					"github": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubLink"),
+						},
+					},
+				},
+				Required: []string{"title", "publishedAt"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ChangelogReactions", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubLink", v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_ChangelogReactions(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ChangelogReactions are reaction counts on the discussion.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"thumbsUp": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -109,6 +599,235 @@ func schema_pkg_apis_feedback_v1alpha1_ChangelogSource(ref common.ReferenceCallb
 					},
 				},
 				Required: []string{"repository", "discussionCategory"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_CreditGrantReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CreditGrantReference names a billing.miloapis.com CreditGrant.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_DeliveryEvent(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DeliveryEvent is one stage change.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"stage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"closed\"`\n - `\"picked-up\"`\n - `\"planned\"`\n - `\"released\"`\n - `\"requested\"`",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"closed", "picked-up", "planned", "released", "requested"},
+						},
+					},
+					"at": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"cause": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Cause describes what moved the stage, e.g. a pull request opening.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"stage", "at"},
+			},
+		},
+		Dependencies: []string{
+			v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_DeliveryStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DeliveryStatus tracks a post's delivery stage and the work behind it.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"stage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Stage is the highest stage whose condition currently holds.\n\nPossible enum values:\n - `\"closed\"`\n - `\"picked-up\"`\n - `\"planned\"`\n - `\"released\"`\n - `\"requested\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"closed", "picked-up", "planned", "released", "requested"},
+						},
+					},
+					"highestNotified": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HighestNotified is the highest stage announced to followers. A stage is only announced when it passes this one.\n\nPossible enum values:\n - `\"closed\"`\n - `\"picked-up\"`\n - `\"planned\"`\n - `\"released\"`\n - `\"requested\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"closed", "picked-up", "planned", "released", "requested"},
+						},
+					},
+					"history": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "History records each stage change.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DeliveryEvent"),
+									},
+								},
+							},
+						},
+					},
+					"work": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Work is the related work behind the post.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DeliveryWork"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DeliveryEvent", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DeliveryWork"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_DeliveryWork(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DeliveryWork summarises sub-issues and linked pull requests. Only public issues and pull requests are included.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"total": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Total and Done count sub-issues when there are any, otherwise linked pull requests.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"done": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"integer"},
+							Format: "int32",
+						},
+					},
+					"items": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.WorkItem"),
+									},
+								},
+							},
+						},
+					},
+					"partShipped": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "PartShipped records changelog entries that shipped part of the work.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PartShipped"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PartShipped", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.WorkItem"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_DraftIssue(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "DraftIssue is a proposed public issue.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"title": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"body": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+				Required: []string{"title", "body"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_ExternalReporter(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ExternalReporter identifies a reporter outside Datum.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"email": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"githubLogin": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
 			},
 		},
 	}
@@ -233,6 +952,7 @@ func schema_pkg_apis_feedback_v1alpha1_FeedbackSourceSpec(ref common.ReferenceCa
 									SchemaProps: spec.SchemaProps{
 										Type:   []string{"string"},
 										Format: "",
+										Enum:   []interface{}{"backlog", "closed", "in-progress", "none", "on-deck", "planning", "shipped"},
 									},
 								},
 							},
@@ -312,6 +1032,105 @@ func schema_pkg_apis_feedback_v1alpha1_FeedbackSourceStatus(ref common.Reference
 		},
 		Dependencies: []string{
 			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.RateLimitStatus", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ReconcileStatus", v1.Condition{}.OpenAPIModelName(), v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_GitHubIssue(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GitHubIssue identifies the issue backing a post.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"org": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"repository": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"number": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State is \"open\" or \"closed\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"stateReason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StateReason is GitHub's close reason: \"completed\" or \"not_planned\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"createdAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"updatedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+				},
+				Required: []string{"org", "repository", "number", "url", "state"},
+			},
+		},
+		Dependencies: []string{
+			v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_GitHubLink(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GitHubLink identifies a GitHub issue, milestone or discussion.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Description: "URL is the HTML URL on github.com.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"number": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Number is the issue, milestone or discussion number.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"url", "number"},
+			},
+		},
 	}
 }
 
@@ -467,6 +1286,774 @@ func schema_pkg_apis_feedback_v1alpha1_MilestoneSource(ref common.ReferenceCallb
 	}
 }
 
+func schema_pkg_apis_feedback_v1alpha1_PartShipped(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PartShipped records a changelog entry that linked a work item before the post itself was released.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"changelog": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Changelog is the ChangelogEntry name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"at": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+				},
+				Required: []string{"changelog", "at"},
+			},
+		},
+		Dependencies: []string{
+			v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_Post(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Post is a public roadmap item synced from a GitHub issue. Every Post is backed by a GitHub issue; unreviewed feedback is a Submission, never a Post.\n\nThe name is \"<org>.<repository>.<number>\", e.g. datum-cloud.enhancements.912.\n\nOnly the feedback-sync service account creates, updates and deletes posts and writes their status. Staff can only patch spec.hidden. Everyone else can read them.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostSpec", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostList is a list of Post.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Post"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Post", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostQuery(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostQuery searches, filters and sorts posts. Create it and read the results from status; it is not stored.\n\n\tapiVersion: feedback.miloapis.com/v1alpha1\n\tkind: PostQuery\n\tspec:\n\t  text: wildcard hostnames\n\t  filter:\n\t    state: [planning, on-deck, in-progress]\n\t  sort: top\n\t  limit: 20",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQuerySpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryStatus"),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQuerySpec", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostQueryFilter(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostQueryFilter narrows PostQuery results. Every set field must match.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"state": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+										Enum:   []interface{}{"backlog", "closed", "in-progress", "none", "on-deck", "planning", "shipped"},
+									},
+								},
+							},
+						},
+					},
+					"categories": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"orgs": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Orgs filters by GitHub organization.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"deliveryStage": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+										Enum:   []interface{}{"closed", "picked-up", "planned", "released", "requested"},
+									},
+								},
+							},
+						},
+					},
+					"votedByMe": {
+						SchemaProps: spec.SchemaProps{
+							Description: "VotedByMe keeps posts the caller voted on. User context only.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"followedByMe": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FollowedByMe keeps posts the caller follows. User context only.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostQueryList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostQueryList is required by the API machinery; PostQuery cannot be listed.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQuery"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQuery", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostQueryResult(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostQueryResult is one post in the results.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the Post name.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"title": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"backlog\"`\n - `\"closed\"`\n - `\"in-progress\"`\n - `\"none\"`\n - `\"on-deck\"`\n - `\"planning\"`\n - `\"shipped\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"backlog", "closed", "in-progress", "none", "on-deck", "planning", "shipped"},
+						},
+					},
+					"categories": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"votes": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostVotes"),
+						},
+					},
+					"deliveryStage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"closed\"`\n - `\"picked-up\"`\n - `\"planned\"`\n - `\"released\"`\n - `\"requested\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"closed", "picked-up", "planned", "released", "requested"},
+						},
+					},
+					"votedByMe": {
+						SchemaProps: spec.SchemaProps{
+							Description: "VotedByMe is set in the user context.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"score": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Score is the relevance or similarity score, when text or similarTo is used.",
+							Type:        []string{"number"},
+							Format:      "double",
+						},
+					},
+				},
+				Required: []string{"name", "title"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostVotes"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostQuerySpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostQuerySpec describes the query.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"text": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Text is a keyword search, answered by the search service.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"similarTo": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SimilarTo is draft feedback text. Results are posts with similar embeddings, for duplicate checks.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"filter": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Filter narrows the results.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryFilter"),
+						},
+					},
+					"sort": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Sort orders the results. Defaults to relevance when text or similarTo is set, otherwise top.\n\nPossible enum values:\n - `\"newest\"` sorts by GitHub createdAt, newest first.\n - `\"recentlyChanged\"` sorts by the latest delivery history entry.\n - `\"relevance\"` is the default when text or similarTo is set.\n - `\"top\"` sorts by votes.total, highest first.\n - `\"trending\"` sorts by votes.trendingScore.",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"newest", "recentlyChanged", "relevance", "top", "trending"},
+						},
+					},
+					"limit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Limit is the page size.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"continue": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Continue is status.continue from the previous page.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"facets": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Facets names the fields to count values for: state, categories, orgs or deliveryStage.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryFilter"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostQueryStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostQueryStatus carries the results.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"results": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryResult"),
+									},
+								},
+							},
+						},
+					},
+					"facets": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Facets maps each requested field to value counts.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type: []string{"object"},
+										AdditionalProperties: &spec.SchemaOrBool{
+											Allows: true,
+											Schema: &spec.Schema{
+												SchemaProps: spec.SchemaProps{
+													Type:   []string{"integer"},
+													Format: "int32",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					"continue": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Continue fetches the next page. Empty on the last page.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostQueryResult"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostReference(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostReference names a Post.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name of the Post, e.g. datum-cloud.enhancements.912.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"name"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostSpec holds the fields staff control.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"hidden": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Hidden removes the post from every client and from search.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostStatus holds the fields synced from GitHub and derived by the service.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"title": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Title is the issue title.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"summary": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Summary is a plain-text excerpt of the body.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"bodyHTML": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BodyHTML is the issue body, sanitised against an allow-list.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State is the public status, mapped from the Enhancements project.\n\nPossible enum values:\n - `\"backlog\"`\n - `\"closed\"`\n - `\"in-progress\"`\n - `\"none\"`\n - `\"on-deck\"`\n - `\"planning\"`\n - `\"shipped\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"backlog", "closed", "in-progress", "none", "on-deck", "planning", "shipped"},
+						},
+					},
+					"categories": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Categories are mapped from labels by the FeedbackSource.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"labels": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Labels are the issue's GitHub labels.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"issueType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IssueType is the GitHub issue type, e.g. Enhancement.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"github": {
+						SchemaProps: spec.SchemaProps{
+							Description: "GitHub identifies the backing issue.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubIssue"),
+						},
+					},
+					"release": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Release is the name of the Release whose milestone the issue is on.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"votes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Votes are the vote totals.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostVotes"),
+						},
+					},
+					"publicVoters": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "PublicVoters are up to 10 voters who opted in to showing their votes.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PublicVoter"),
+									},
+								},
+							},
+						},
+					},
+					"delivery": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Delivery tracks the post from request to release.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DeliveryStatus"),
+						},
+					},
+					"lastSyncedAt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LastSyncedAt is when feedback-sync last wrote this post.",
+							Ref:         ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DeliveryStatus", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubIssue", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostVotes", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PublicVoter", v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PostVotes(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PostVotes are vote totals for a post.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"total": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Total is Datum votes plus GitHub 👍, minus people matched as doing both.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"datum": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Datum is the number of Vote resources.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"github": {
+						SchemaProps: spec.SchemaProps{
+							Description: "GitHub is the 👍 reaction count on the issue.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"trendingScore": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TrendingScore weights votes with a 7-day half-life.",
+							Type:        []string{"number"},
+							Format:      "double",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_feedback_v1alpha1_ProjectRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -506,6 +2093,61 @@ func schema_pkg_apis_feedback_v1alpha1_ProjectRef(ref common.ReferenceCallback) 
 					},
 				},
 				Required: []string{"owner", "number"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PublicVoter(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PublicVoter is a voter who opted in to being shown.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"displayName": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"avatarURL": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+				Required: []string{"displayName"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_PullRequestRef(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "PullRequestRef is a pull request linked to a work item.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"ref": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+				Required: []string{"ref", "state"},
 			},
 		},
 	}
@@ -566,6 +2208,182 @@ func schema_pkg_apis_feedback_v1alpha1_ReconcileStatus(ref common.ReferenceCallb
 	}
 }
 
+func schema_pkg_apis_feedback_v1alpha1_Release(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Release maps to a milestone in the FeedbackSource's milestones repository. Only feedback-sync writes releases; everyone can read them.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ReleaseStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ReleaseStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_ReleaseList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ReleaseList is a list of Release.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Release"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Release", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_ReleaseStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ReleaseStatus is synced from the milestone.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"title": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Title is the milestone title, e.g. \"Hedy: 2.0\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"codename": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"version": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"dueOn": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DueOn is the milestone due date, as YYYY-MM-DD.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"shipped": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Shipped is set when the milestone is closed.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"descriptionHTML": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"coverImage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CoverImage is a key into the website's static assets.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"posts": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Posts are the names of posts on the milestone.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"github": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubLink"),
+						},
+					},
+				},
+				Required: []string{"title"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubLink"},
+	}
+}
+
 func schema_pkg_apis_feedback_v1alpha1_RepositorySelector(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -612,6 +2430,1530 @@ func schema_pkg_apis_feedback_v1alpha1_RepositorySelector(ref common.ReferenceCa
 				},
 			},
 		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityAcknowledgement(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityAcknowledgement is a read-only public credit for a fixed or disclosed SecurityReport whose reporter chose public credit. It holds only what the acknowledgements page shows.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAcknowledgementStatus"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAcknowledgementStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityAcknowledgementList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityAcknowledgementList is a list of SecurityAcknowledgement.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAcknowledgement"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAcknowledgement", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityAcknowledgementStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityAcknowledgementStatus is the public credit.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"month": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Month is when the report was fixed, as YYYY-MM.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"severity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"critical\"`\n - `\"high\"`\n - `\"informational\"`\n - `\"low\"`\n - `\"medium\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"critical", "high", "informational", "low", "medium"},
+						},
+					},
+				},
+				Required: []string{"name", "month"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityAdvisory(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityAdvisory is the published advisory.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"cve": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityCredit(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityCredit is the reporter's credit preference.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"public": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Public lists the reporter on the acknowledgements page once the report is Fixed or Disclosed.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityReport(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityReport is a private vulnerability report. Reporters create and read their own in the user context, without status.internal. Only the Security Team role can list reports and write status. Reports are never synced to GitHub, embedded, indexed or sent to the AI gateway, and are audited at Metadata level only.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportStatus"),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportSpec", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityReportContext(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityReportContext is where the report came from.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"client": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"datumctl\"`\n - `\"email\"` and ClientGitHub are only used for security reports the Security Team logs on behalf of an external reporter.\n - `\"github\"`\n - `\"patch\"`\n - `\"portal\"`\n - `\"website\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"datumctl", "email", "github", "patch", "portal", "website"},
+						},
+					},
+					"filedByAgent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FiledByAgent is set when an agent (Patch, non-interactive datumctl) filed the report.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"organization": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"clientVersion": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityReportInternal(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityReportInternal is Security Team only.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"assignee": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"duplicateOf": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DuplicateOf is the name of the original report.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"tracking": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Tracking links the private issue or draft advisory for the fix.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"notes": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityReportList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityReportList is a list of SecurityReport.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReport"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReport", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityReportSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityReportSpec is what the reporter submitted.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"title": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"description": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"affected": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Affected is free text that helps routing, e.g. \"connectors\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"stepsToReproduce": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"impact": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"attachments": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Attachments reference files uploaded with AttachmentUpload for a security report.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentReference"),
+									},
+								},
+							},
+						},
+					},
+					"credit": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Credit is how the reporter wants to be credited.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityCredit"),
+						},
+					},
+					"reporter": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reporter is set only on reports the Security Team logs for someone without a Datum account (from email or GitHub private reporting).",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ExternalReporter"),
+						},
+					},
+					"context": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportContext"),
+						},
+					},
+				},
+				Required: []string{"title", "description"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentReference", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.ExternalReporter", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityCredit", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportContext"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityReportStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityReportStatus is written by the Security Team.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"Disclosed\"`\n - `\"Duplicate\"`\n - `\"Fixed\"`\n - `\"Fixing\"`\n - `\"NotApplicable\"`\n - `\"Received\"`\n - `\"Triaged\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"Disclosed", "Duplicate", "Fixed", "Fixing", "NotApplicable", "Received", "Triaged"},
+						},
+					},
+					"severity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"critical\"`\n - `\"high\"`\n - `\"informational\"`\n - `\"low\"`\n - `\"medium\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"critical", "high", "informational", "low", "medium"},
+						},
+					},
+					"cvssVector": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is shown to the reporter for NotApplicable and Duplicate.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"timeline": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Timeline is visible to the reporter.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityTimelineEntry"),
+									},
+								},
+							},
+						},
+					},
+					"advisory": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAdvisory"),
+						},
+					},
+					"reward": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReward"),
+						},
+					},
+					"internal": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Internal is visible to the Security Team only.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportInternal"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityAdvisory", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReportInternal", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityReward", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SecurityTimelineEntry"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityReward(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityReward records how the reporter was thanked.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"credits\"`\n - `\"none\"`\n - `\"swag\"`\n - `\"thanks\"`",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"credits", "none", "swag", "thanks"},
+						},
+					},
+					"amount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Amount is the credit amount, for kind credits.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"creditGrantRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CreditGrantRef names the billing CreditGrant, for kind credits.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.CreditGrantReference"),
+						},
+					},
+					"grantedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+				},
+				Required: []string{"kind"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.CreditGrantReference", v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SecurityTimelineEntry(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SecurityTimelineEntry is one phase change.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"Disclosed\"`\n - `\"Duplicate\"`\n - `\"Fixed\"`\n - `\"Fixing\"`\n - `\"NotApplicable\"`\n - `\"Received\"`\n - `\"Triaged\"`",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"Disclosed", "Duplicate", "Fixed", "Fixing", "NotApplicable", "Received", "Triaged"},
+						},
+					},
+					"at": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"note": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+				Required: []string{"phase", "at"},
+			},
+		},
+		Dependencies: []string{
+			v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SimilarPost(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SimilarPost is a post that may cover the same feedback.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"score": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"number"},
+							Format:  "double",
+						},
+					},
+				},
+				Required: []string{"name", "score"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_Submission(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Submission is private feedback waiting for a staff decision. Submitters create and read their own in the user context; staff list and review them in the platform context. Nothing in a submission reaches GitHub unless staff approve it, and then only the staff-edited public title and body.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionStatus"),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionSpec", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubmissionContext(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubmissionContext is private context about where the feedback came from.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"client": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"datumctl\"`\n - `\"email\"` and ClientGitHub are only used for security reports the Security Team logs on behalf of an external reporter.\n - `\"github\"`\n - `\"patch\"`\n - `\"portal\"`\n - `\"website\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"datumctl", "email", "github", "patch", "portal", "website"},
+						},
+					},
+					"pageURL": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"organization": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"project": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"requestIDs": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "RequestIDs are recent API request IDs, for debugging.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"clientVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ClientVersion is e.g. cloud-portal@2026.10.1.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubmissionList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubmissionList is a list of Submission.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Submission"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Submission", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubmissionReview(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubmissionReview is the body of a create on submissions/{name}/review. Only staff in the platform context can create one. The response is the updated Submission.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionReviewSpec"),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionReviewSpec", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubmissionReviewOutcome(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubmissionReviewOutcome records the staff decision.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"reviewer": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reviewer is the staff member who decided. Staff only.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"decision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"Approved\"` creates a public issue from the submission.\n - `\"Merged\"` adds the submitter to an existing post.\n - `\"Rejected\"` closes the submission with a reason.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"Approved", "Merged", "Rejected"},
+						},
+					},
+					"reviewedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+					"publicTitle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PublicTitle and PublicBody are what goes to GitHub on approval.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"publicBody": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"mergedInto": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MergedInto is the post name when the decision is Merged.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is shown to the submitter when the decision is Rejected.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"decision", "reviewedAt"},
+			},
+		},
+		Dependencies: []string{
+			v1.Time{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubmissionReviewSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubmissionReviewSpec is the decision.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"decision": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"Approved\"` creates a public issue from the submission.\n - `\"Merged\"` adds the submitter to an existing post.\n - `\"Rejected\"` closes the submission with a reason.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"Approved", "Merged", "Rejected"},
+						},
+					},
+					"publicTitle": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PublicTitle and PublicBody are required for Approved. They default to the triage draft in clients.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"publicBody": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"mergedInto": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MergedInto is required for Merged.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reason is required for Rejected and shown to the submitter.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"decision"},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubmissionSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubmissionSpec is what the user submitted.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"bug\"`\n - `\"idea\"`\n - `\"other\"`",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"bug", "idea", "other"},
+						},
+					},
+					"title": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"body": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"attachments": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Attachments reference files uploaded with AttachmentUpload.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentReference"),
+									},
+								},
+							},
+						},
+					},
+					"context": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Context is filled by the client and never sent to GitHub.",
+							Default:     map[string]interface{}{},
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionContext"),
+						},
+					},
+				},
+				Required: []string{"kind", "title", "body"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentReference", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionContext"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubmissionStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubmissionStatus is written by the server, feedback-controller, feedback-sync and the review subresource. Submitters see phase, postRef and review.reason only.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"Approved\"`\n - `\"Merged\"`\n - `\"PendingReview\"`\n - `\"Rejected\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"Approved", "Merged", "PendingReview", "Rejected"},
+						},
+					},
+					"triage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Triage is advisory, written by feedback-controller. Staff only.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionTriage"),
+						},
+					},
+					"review": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Review is the staff decision, written through the review subresource.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionReviewOutcome"),
+						},
+					},
+					"postRef": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PostRef is the post the submission became or was merged into. Set by feedback-sync once the post syncs.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostReference"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostReference", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionReviewOutcome", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubmissionTriage"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubmissionToSecurityReport(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubmissionToSecurityReport is the body of a create on submissions/{name}/to-security-report. It moves a misfiled submission to the security track: a SecurityReport is created from it, its attachments move, and the submission is deleted, in one transaction. The response is the new SecurityReport.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"affected": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Affected optionally sets spec.affected on the new report.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubmissionTriage(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubmissionTriage is the controller's advisory triage.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"suggestedCategories": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"suggestedKind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"bug\"`\n - `\"idea\"`\n - `\"other\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"bug", "idea", "other"},
+						},
+					},
+					"similarPosts": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SimilarPost"),
+									},
+								},
+							},
+						},
+					},
+					"draftIssue": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DraftIssue is a public title and body with private details stripped.",
+							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DraftIssue"),
+						},
+					},
+					"fraudScore": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FraudScore is from the fraud service, 0 to 1.",
+							Type:        []string{"number"},
+							Format:      "double",
+						},
+					},
+					"likelySecurityIssue": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LikelySecurityIssue flags submissions that should be moved to the security track with the to-security-report subresource.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.DraftIssue", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SimilarPost"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_Subscription(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Subscription links a user to a post they follow, in the user context. It is created when the user votes or their submission is approved or merged, and the user can delete it. The name must equal spec.postRef.name.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubscriptionSpec"),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.SubscriptionSpec", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubscriptionList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubscriptionList is a list of Subscription.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Subscription"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Subscription", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_SubscriptionSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SubscriptionSpec identifies the post.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"postRef": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostReference"),
+						},
+					},
+					"reason": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Possible enum values:\n - `\"manual\"`\n - `\"merged\"`\n - `\"submitted\"`\n - `\"voted\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"manual", "merged", "submitted", "voted"},
+						},
+					},
+				},
+				Required: []string{"postRef"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostReference"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_Vote(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Vote is a user's vote on a post, in the user context. The name must equal spec.postRef.name, so a user votes at most once per post. Deleting the Vote removes the vote. Creating one also creates a Subscription to the post.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ObjectMeta{}.OpenAPIModelName()),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.VoteSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.VoteStatus"),
+						},
+					},
+				},
+				Required: []string{"spec"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.VoteSpec", "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.VoteStatus", v1.ObjectMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_VoteList(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "VoteList is a list of Vote.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref(v1.ListMeta{}.OpenAPIModelName()),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Vote"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.Vote", v1.ListMeta{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_VoteSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "VoteSpec identifies the post and where the vote came from.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"postRef": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostReference"),
+						},
+					},
+					"source": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Source is the client the vote was cast from.\n\nPossible enum values:\n - `\"datumctl\"`\n - `\"email\"` and ClientGitHub are only used for security reports the Security Team logs on behalf of an external reporter.\n - `\"github\"`\n - `\"patch\"`\n - `\"portal\"`\n - `\"website\"`",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"datumctl", "email", "github", "patch", "portal", "website"},
+						},
+					},
+				},
+				Required: []string{"postRef"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostReference"},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_VoteStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "VoteStatus is written by the server.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"organizations": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Organizations the voter belonged to when voting. Used for staff analytics and never public.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_WorkItem(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "WorkItem is a sub-issue or linked pull request.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is \"issue\" or \"pullRequest\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ref": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Ref is \"<org>/<repo>#<number>\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"title": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"state": {
+						SchemaProps: spec.SchemaProps{
+							Description: "State is \"open\", \"closed\" or \"merged\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"url": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"pullRequests": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "PullRequests are the pull requests that close this issue.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PullRequestRef"),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"kind", "ref", "state"},
+			},
+		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PullRequestRef"},
 	}
 }
 

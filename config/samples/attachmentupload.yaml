@@ -1,0 +1,9 @@
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: AttachmentUpload
+metadata:
+  generateName: att-
+spec:
+  purpose: Submission
+  name: error.log
+  contentType: text/plain
+  data: ZXJyb3I6IGNvbm5lY3Rpb24gcmVmdXNlZAo=

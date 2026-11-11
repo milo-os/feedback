@@ -1,0 +1,8 @@
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: Vote
+metadata:
+  name: datum-cloud.enhancements.912
+spec:
+  postRef:
+    name: datum-cloud.enhancements.912
+  source: portal

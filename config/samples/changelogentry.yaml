@@ -1,0 +1,19 @@
+# Changelog entries are written by feedback-sync. Shown here for reference.
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: ChangelogEntry
+metadata:
+  name: datum-cloud.datum.303
+status:
+  title: "Application Load Balancer: wildcard hostnames"
+  publishedAt: "2026-10-07T13:23:39Z"
+  categories: [deliver]
+  bodyHTML: "<p>...</p>"
+  posts:
+    - datum-cloud.enhancements.913
+  issueRefs:
+    - datum-cloud/enhancements#913
+    - datum-cloud/compute#311
+  reactions: {thumbsUp: 4}
+  github:
+    url: https://github.com/datum-cloud/datum/discussions/303
+    number: 303

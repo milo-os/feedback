@@ -35,9 +35,7 @@ func init() {
 	// There is no separate internal version: register the v1alpha1 types as
 	// internal too so the generic registry can convert and watch them.
 	Scheme.AddKnownTypes(schema.GroupVersion{Group: feedbackv1alpha1.GroupName, Version: runtime.APIVersionInternal},
-		&feedbackv1alpha1.FeedbackSource{},
-		&feedbackv1alpha1.FeedbackSourceList{},
-	)
+		feedbackv1alpha1.KnownTypes()...)
 
 	unversioned := schema.GroupVersion{Group: "", Version: "v1"}
 	Scheme.AddUnversionedTypes(unversioned,

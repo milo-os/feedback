@@ -12,7 +12,17 @@ import (
 
 type FeedbackV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	AttachmentUploadsGetter
+	ChangelogEntriesGetter
 	FeedbackSourcesGetter
+	PostsGetter
+	PostQueriesGetter
+	ReleasesGetter
+	SecurityAcknowledgementsGetter
+	SecurityReportsGetter
+	SubmissionsGetter
+	SubscriptionsGetter
+	VotesGetter
 }
 
 // FeedbackV1alpha1Client is used to interact with features provided by the feedback.miloapis.com group.
@@ -20,8 +30,48 @@ type FeedbackV1alpha1Client struct {
 	restClient rest.Interface
 }
 
+func (c *FeedbackV1alpha1Client) AttachmentUploads() AttachmentUploadInterface {
+	return newAttachmentUploads(c)
+}
+
+func (c *FeedbackV1alpha1Client) ChangelogEntries() ChangelogEntryInterface {
+	return newChangelogEntries(c)
+}
+
 func (c *FeedbackV1alpha1Client) FeedbackSources() FeedbackSourceInterface {
 	return newFeedbackSources(c)
+}
+
+func (c *FeedbackV1alpha1Client) Posts() PostInterface {
+	return newPosts(c)
+}
+
+func (c *FeedbackV1alpha1Client) PostQueries() PostQueryInterface {
+	return newPostQueries(c)
+}
+
+func (c *FeedbackV1alpha1Client) Releases() ReleaseInterface {
+	return newReleases(c)
+}
+
+func (c *FeedbackV1alpha1Client) SecurityAcknowledgements() SecurityAcknowledgementInterface {
+	return newSecurityAcknowledgements(c)
+}
+
+func (c *FeedbackV1alpha1Client) SecurityReports() SecurityReportInterface {
+	return newSecurityReports(c)
+}
+
+func (c *FeedbackV1alpha1Client) Submissions() SubmissionInterface {
+	return newSubmissions(c)
+}
+
+func (c *FeedbackV1alpha1Client) Subscriptions() SubscriptionInterface {
+	return newSubscriptions(c)
+}
+
+func (c *FeedbackV1alpha1Client) Votes() VoteInterface {
+	return newVotes(c)
 }
 
 // NewForConfig creates a new FeedbackV1alpha1Client for the given config.

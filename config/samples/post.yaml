@@ -1,0 +1,55 @@
+# Posts are written by feedback-sync. Shown here for reference.
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: Post
+metadata:
+  name: datum-cloud.enhancements.912
+spec:
+  hidden: false
+status:
+  title: Bare Metal Infrastructure service
+  summary: Expands Datum's platform to support full lifecycle management of bare metal.
+  bodyHTML: "<h3>High-Level Summary</h3><p>This enhancement ...</p>"
+  state: in-progress
+  categories: [build]
+  labels: [Build]
+  issueType: Enhancement
+  github:
+    org: datum-cloud
+    repository: enhancements
+    number: 912
+    url: https://github.com/datum-cloud/enhancements/issues/912
+    state: open
+    createdAt: "2026-09-30T14:12:00Z"
+    updatedAt: "2026-10-07T09:40:00Z"
+  release: hedy-2-0
+  votes:
+    total: 9
+    datum: 6
+    github: 4
+    trendingScore: 3.42
+  publicVoters:
+    - displayName: Ada L.
+      avatarURL: https://example.com/ada.png
+  delivery:
+    stage: picked-up
+    highestNotified: picked-up
+    history:
+      - {stage: requested, at: "2026-09-30T14:12:00Z"}
+      - {stage: planned, at: "2026-10-02T09:00:00Z"}
+      - stage: picked-up
+        at: "2026-10-07T09:40:00Z"
+        cause: datum-cloud/compute#318 opened, closes datum-cloud/compute#311
+    work:
+      total: 5
+      done: 3
+      items:
+        - kind: issue
+          ref: datum-cloud/compute#311
+          title: BMC inventory API
+          state: open
+          url: https://github.com/datum-cloud/compute/issues/311
+          pullRequests:
+            - {ref: datum-cloud/compute#318, state: open}
+      partShipped:
+        - {changelog: datum-cloud.datum.303, at: "2026-10-07T13:23:39Z"}
+  lastSyncedAt: "2026-10-08T12:00:00Z"

@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"fmt"
+	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,20 +32,58 @@ func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-func addKnownTypes(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(SchemeGroupVersion,
-		&FeedbackSource{},
-		&FeedbackSourceList{},
-	)
-	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
-	return scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("FeedbackSource"), feedbackSourceFieldLabel)
+// KnownTypes lists every object type in the group. The apiserver also
+// registers these as the internal version.
+func KnownTypes() []runtime.Object {
+	return []runtime.Object{
+		&FeedbackSource{}, &FeedbackSourceList{},
+		&Post{}, &PostList{},
+		&PostQuery{}, &PostQueryList{},
+		&Vote{}, &VoteList{},
+		&Subscription{}, &SubscriptionList{},
+		&Submission{}, &SubmissionList{},
+		&SubmissionReview{},
+		&SubmissionToSecurityReport{},
+		&SecurityReport{}, &SecurityReportList{},
+		&SecurityAcknowledgement{}, &SecurityAcknowledgementList{},
+		&Release{}, &ReleaseList{},
+		&ChangelogEntry{}, &ChangelogEntryList{},
+		&AttachmentUpload{}, &AttachmentUploadList{},
+	}
 }
 
-// feedbackSourceFieldLabel lists the field selectors FeedbackSource supports.
-func feedbackSourceFieldLabel(label, value string) (string, string, error) {
-	switch label {
-	case "metadata.name", "spec.github.org":
-		return label, value, nil
+// FieldSelectors lists the field selectors each kind supports, beyond
+// metadata.name. Registries must expose the same fields from GetAttrs.
+var FieldSelectors = map[string][]string{
+	"FeedbackSource": {"spec.github.org"},
+	"Post":           {"spec.hidden", "status.state", "status.github.org", "status.github.repository", "status.release"},
+	"Vote":           {"spec.postRef.name"},
+	"Subscription":   {"spec.postRef.name", "spec.reason"},
+	"Submission":     {"spec.kind", "status.phase"},
+	"SecurityReport": {"status.phase", "status.severity"},
+	"Release":        {"status.shipped"},
+}
+
+func addKnownTypes(scheme *runtime.Scheme) error {
+	scheme.AddKnownTypes(SchemeGroupVersion, KnownTypes()...)
+	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
+	return AddFieldLabelConversions(scheme, SchemeGroupVersion)
+}
+
+// AddFieldLabelConversions registers FieldSelectors for gv. The apiserver
+// calls it again for the internal version.
+func AddFieldLabelConversions(scheme *runtime.Scheme, gv schema.GroupVersion) error {
+	for kind, fields := range FieldSelectors {
+		allowed := append([]string{"metadata.name"}, fields...)
+		err := scheme.AddFieldLabelConversionFunc(gv.WithKind(kind), func(label, value string) (string, string, error) {
+			if slices.Contains(allowed, label) {
+				return label, value, nil
+			}
+			return "", "", fmt.Errorf("field label not supported for %s: %s (supported: %v)", kind, label, allowed)
+		})
+		if err != nil {
+			return err
+		}
 	}
-	return "", "", fmt.Errorf("field label not supported: %s", label)
+	return nil
 }

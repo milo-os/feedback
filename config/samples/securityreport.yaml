@@ -1,0 +1,25 @@
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: SecurityReport
+metadata:
+  generateName: sec-
+spec:
+  title: Project viewer can read connector credentials
+  description: |
+    A user with the viewer role on a project can read connector credentials.
+  affected: connectors
+  stepsToReproduce: |
+    1. ...
+  impact: Credential disclosure across users in one project
+  attachments:
+    - name: poc.sh
+      contentType: text/x-shellscript
+      uploadRef: att-c71e
+  credit:
+    public: true
+    name: Ada L.
+    url: https://example.com
+  context:
+    client: patch
+    filedByAgent: true
+    organization: acme-corp
+    clientVersion: patch@2026.10.2

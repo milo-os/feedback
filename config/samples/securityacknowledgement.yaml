@@ -1,0 +1,10 @@
+# Read-only view served from SecurityReports. Shown here for reference.
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: SecurityAcknowledgement
+metadata:
+  name: sec-4m8q1
+status:
+  name: Ada L.
+  url: https://example.com
+  month: "2026-11"
+  severity: high

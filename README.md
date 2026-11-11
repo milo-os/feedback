@@ -16,8 +16,10 @@ entries. It runs as an aggregated API server under Milo, like
 
 ## Status
 
-Early scaffold. The server runs and serves `FeedbackSource`. The other
-resources in the design are tracked as sub-issues of the epic.
+Early. Every resource in the design has a v1alpha1 type in
+`pkg/apis/feedback/v1alpha1` and a sample in `config/samples`, but the server
+only serves `FeedbackSource` so far. Storage for the rest is tracked as
+sub-issues of the epic.
 
 | Resource | Storage | State |
 | --- | --- | --- |
