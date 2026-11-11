@@ -1,6 +1,7 @@
 package pg
 
 import (
+	"context"
 	"errors"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,7 +43,35 @@ type Kind struct {
 
 	// TableConvertor renders kubectl tables. Defaults to name and age.
 	TableConvertor rest.TableConvertor
+
+	// ReadFilter optionally returns an extra SQL condition (no parameters)
+	// that every read, update and delete must match. Rows it excludes are
+	// NotFound to the caller. Used to hide hidden posts outside the platform
+	// context.
+	ReadFilter func(ctx context.Context) string
+
+	// BeforeWrite runs inside the write's transaction after validation and
+	// before the row is written. old is nil on create and obj is nil on
+	// delete. It may change obj (for server-computed fields); an error aborts
+	// the write.
+	BeforeWrite func(ctx context.Context, op Op, old, obj runtime.Object) error
+
+	// AfterWrite runs inside the write's transaction after the row is
+	// written, for side effects that must commit with it.
+	AfterWrite func(ctx context.Context, op Op, old, obj runtime.Object) error
+
+	// Decorate fills derived fields on objects about to be returned.
+	Decorate func(ctx context.Context, objs []runtime.Object) error
 }
+
+// Op is a write operation passed to the write hooks.
+type Op string
+
+const (
+	OpCreate Op = "create"
+	OpUpdate Op = "update"
+	OpDelete Op = "delete"
+)
 
 func (k Kind) validate() error {
 	var errs []error
@@ -69,4 +98,34 @@ func (k Kind) columns(obj runtime.Object) []Column {
 		return nil
 	}
 	return k.Columns(obj)
+}
+
+func (k Kind) beforeWrite(ctx context.Context, op Op, old, obj runtime.Object) error {
+	if k.BeforeWrite == nil {
+		return nil
+	}
+	return k.BeforeWrite(ctx, op, old, obj)
+}
+
+func (k Kind) afterWrite(ctx context.Context, op Op, old, obj runtime.Object) error {
+	if k.AfterWrite == nil {
+		return nil
+	}
+	return k.AfterWrite(ctx, op, old, obj)
+}
+
+func (k Kind) decorate(ctx context.Context, objs ...runtime.Object) error {
+	if k.Decorate == nil || len(objs) == 0 {
+		return nil
+	}
+	return k.Decorate(ctx, objs)
+}
+
+func (k Kind) readFilter(ctx context.Context, w *where) {
+	if k.ReadFilter == nil {
+		return
+	}
+	if c := k.ReadFilter(ctx); c != "" {
+		w.conds = append(w.conds, "("+c+")")
+	}
 }

@@ -26,6 +26,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 
 	feedbackapiserver "go.miloapis.com/feedback/internal/apiserver"
+	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/postgres"
 	"go.miloapis.com/feedback/internal/version"
 	"go.miloapis.com/feedback/pkg/generated/openapi"
@@ -121,6 +122,8 @@ type serverOptions struct {
 	RecommendedOptions *options.RecommendedOptions
 	Logs               *logsapi.LoggingConfiguration
 	Postgres           postgres.Config
+	Identities         identity.Identities
+	VoteRetention      time.Duration
 }
 
 func newServerOptions() *serverOptions {
@@ -129,8 +132,10 @@ func newServerOptions() *serverOptions {
 			"/registry/feedback.miloapis.com",
 			feedbackapiserver.Codecs.LegacyCodec(feedbackapiserver.Scheme.PrioritizedVersionsAllGroups()...),
 		),
-		Logs:     logsapi.NewLoggingConfiguration(),
-		Postgres: postgres.Config{MaxConns: 20, ConnectTimeout: 10 * time.Second},
+		Logs:          logsapi.NewLoggingConfiguration(),
+		Postgres:      postgres.Config{MaxConns: 20, ConnectTimeout: 10 * time.Second},
+		Identities:    identity.Default,
+		VoteRetention: 30 * 24 * time.Hour,
 	}
 	// No admission plugins: validation lives in the registry strategies.
 	o.RecommendedOptions.Admission = nil
@@ -145,6 +150,12 @@ func (o *serverOptions) AddFlags(fs *pflag.FlagSet) {
 		"Maximum number of connections in the Postgres pool.")
 	fs.DurationVar(&o.Postgres.ConnectTimeout, "postgres-connect-timeout", o.Postgres.ConnectTimeout,
 		"Timeout for the initial Postgres connection.")
+	fs.StringSliceVar(&o.Identities.Sync, "sync-users", o.Identities.Sync,
+		"Usernames of feedback-sync, the only writer of posts, releases and changelog entries.")
+	fs.StringSliceVar(&o.Identities.Controller, "controller-users", o.Identities.Controller,
+		"Usernames of feedback-controller, which owns delivery tracking on posts.")
+	fs.DurationVar(&o.VoteRetention, "vote-retention", o.VoteRetention,
+		"How long votes on a deleted post are kept in case it returns. 0 disables the purge.")
 }
 
 func (o *serverOptions) Complete() error {
@@ -210,7 +221,11 @@ func (o *serverOptions) Config() (*feedbackapiserver.Config, error) {
 
 	return &feedbackapiserver.Config{
 		GenericConfig: genericConfig,
-		ExtraConfig:   feedbackapiserver.ExtraConfig{Postgres: o.Postgres},
+		ExtraConfig: feedbackapiserver.ExtraConfig{
+			Postgres:      o.Postgres,
+			Identities:    o.Identities,
+			VoteRetention: o.VoteRetention,
+		},
 	}, nil
 }
 

@@ -17,14 +17,15 @@ entries. It runs as an aggregated API server under Milo, like
 ## Status
 
 Early. Every resource in the design has a v1alpha1 type in
-`pkg/apis/feedback/v1alpha1` and a sample in `config/samples`, but the server
-only serves `FeedbackSource` so far. Storage for the rest is tracked as
+`pkg/apis/feedback/v1alpha1` and a sample in `config/samples`, and the server
+serves `FeedbackSource`, `Post`, `Release` and `ChangelogEntry`. Storage for the rest is tracked as
 sub-issues of the epic.
 
 | Resource | Storage | State |
 | --- | --- | --- |
 | `FeedbackSource` | etcd | served |
-| `Post`, `PostQuery`, `Release`, `ChangelogEntry` | Postgres | planned |
+| `Post`, `Release`, `ChangelogEntry` | Postgres | served |
+| `PostQuery` | Postgres | planned |
 | `Vote`, `Subscription` | Postgres | planned |
 | `Submission`, `SecurityReport`, `SecurityAcknowledgement` | Postgres | planned |
 
@@ -58,6 +59,27 @@ Migrations are forward-only. `feedback migrate` applies them; the Deployment
 runs it as an init container, and a Postgres session lock keeps replicas from
 migrating at the same time. Add a migration as the next numbered file in
 `migrations/`.
+
+## Who writes what
+
+`feedback-sync` and `feedback-controller` are recognised by username
+(`--sync-users`, `--controller-users`; defaults are the `feedback-system`
+service accounts). On top of Milo's IAM:
+
+- Only `feedback-sync` creates and deletes posts, and writes releases and
+  changelog entries.
+- Post status is split: `feedback-sync` owns the GitHub-derived fields and
+  delivery work items; `feedback-controller` owns the delivery stage,
+  history, `highestNotified` and part-shipped records; the server computes
+  vote counts. Fields a caller doesn't own are ignored, like spec on a
+  status update. Anyone else gets Forbidden on post status.
+- Staff can change `spec.hidden` and metadata. Hidden posts are NotFound
+  outside the platform context and never listed on releases or changelog
+  entries.
+- `Release.status.posts` and `ChangelogEntry.status.posts` are derived from
+  the posts table on every read.
+- Votes on a deleted post are kept for `--vote-retention` (30 days) in case
+  the post comes back.
 
 ## Development
 

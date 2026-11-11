@@ -6,11 +6,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
-	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,68 +15,22 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"k8s.io/apiserver/pkg/authentication/user"
-	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/apiserver/pkg/storage/names"
 
-	"go.miloapis.com/feedback/internal/postgres"
 	"go.miloapis.com/feedback/internal/storage/pg"
+	"go.miloapis.com/feedback/internal/storage/pg/pgtest"
 	"go.miloapis.com/feedback/pkg/apis/feedback/install"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
 var db *pg.DB
 
-// TestMain starts one pgvector Postgres for the package and applies the real
-// migrations. Without Docker the tests skip.
-func TestMain(m *testing.M) {
-	os.Exit(func() int {
-		ctx := context.Background()
-		ctr, err := tcpostgres.Run(ctx, "pgvector/pgvector:pg17",
-			tcpostgres.WithDatabase("feedback"),
-			tcpostgres.WithUsername("feedback"),
-			tcpostgres.WithPassword("feedback"),
-			testcontainers.WithWaitStrategy(wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(90*time.Second)),
-		)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "skipping Postgres tests: %v\n", err)
-			return m.Run() // tests call requireDB and skip
-		}
-		defer func() { _ = testcontainers.TerminateContainer(ctr) }()
-
-		dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		cfg := postgres.Config{DSN: dsn}
-		if err := postgres.Migrate(ctx, cfg); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		pool, err := postgres.NewPool(ctx, cfg)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		defer pool.Close()
-		db = &pg.DB{Pool: pool}
-		return m.Run()
-	}())
-}
+func TestMain(m *testing.M) { os.Exit(pgtest.Main(m)) }
 
 func requireDB(t *testing.T) {
 	t.Helper()
-	if db == nil {
-		t.Skip("Postgres not available (needs Docker)")
-	}
-	// Each test starts from empty tables.
-	_, err := db.Pool.Exec(context.Background(), "TRUNCATE posts, votes, subscriptions")
-	if err != nil {
-		t.Fatal(err)
-	}
+	db = pgtest.Require(t, "posts", "votes", "subscriptions")
 }
 
 var scheme = func() *runtime.Scheme {
@@ -192,21 +142,8 @@ func subscriptionStore(t *testing.T) *pg.Store {
 	return s
 }
 
-// requestContext is what the apiserver passes a cluster-scoped request.
-func requestContext() context.Context {
-	return request.WithNamespace(context.Background(), "")
-}
-
-func asUser(uid string) context.Context {
-	return request.WithUser(requestContext(), &user.DefaultInfo{
-		Name: uid + "@example.com", UID: uid,
-		Extra: map[string][]string{pg.ParentKindExtraKey: {"User"}, pg.ParentNameExtraKey: {uid}},
-	})
-}
-
-func asPlatform() context.Context {
-	return request.WithUser(requestContext(), &user.DefaultInfo{Name: "staff@datum.net", UID: "staff"})
-}
+func asUser(uid string) context.Context { return pgtest.AsUser(uid) }
+func asPlatform() context.Context       { return pgtest.AsPlatform("staff@datum.net") }
 
 func vote(post string) *v1.Vote {
 	return &v1.Vote{ObjectMeta: metav1.ObjectMeta{Name: post}, Spec: v1.VoteSpec{PostRef: v1.PostReference{Name: post}}}
@@ -503,8 +440,7 @@ func TestUserScopes(t *testing.T) {
 		t.Fatalf("platform create: got %v, want Forbidden", err)
 	}
 
-	org := request.WithUser(requestContext(), &user.DefaultInfo{Name: "x", Extra: map[string][]string{
-		pg.ParentKindExtraKey: {"Organization"}, pg.ParentNameExtraKey: {"acme"}}})
+	org := pgtest.AsContext("Organization", "acme")
 	if _, err := s.List(org, &metainternalversion.ListOptions{}); !apierrors.IsForbidden(err) {
 		t.Fatalf("organization context: got %v, want Forbidden", err)
 	}

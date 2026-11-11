@@ -1,6 +1,9 @@
 package v1alpha1
 
 import (
+	"fmt"
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -248,4 +251,10 @@ type PostList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 
 	Items []Post `json:"items"`
+}
+
+// PostName is the name of the Post for a GitHub issue:
+// "<org>.<repository>.<number>", lower-cased.
+func PostName(org, repository string, number int32) string {
+	return fmt.Sprintf("%s.%s.%d", strings.ToLower(org), strings.ToLower(repository), number)
 }
