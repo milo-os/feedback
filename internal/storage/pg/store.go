@@ -130,6 +130,7 @@ type current struct {
 func (s *Store) load(ctx context.Context, sc Scope, name string, forUpdate bool) (*current, error) {
 	w := &where{}
 	w.scope(sc)
+	s.kind.readFilter(ctx, w)
 	w.add("name = %s", name)
 	q := fmt.Sprintf("SELECT scope_type, scope_name, resource_version, object FROM %s WHERE %s LIMIT 2", s.table(), w.sql())
 	if forUpdate {
@@ -177,6 +178,9 @@ func (s *Store) Get(ctx context.Context, name string, _ *metav1.GetOptions) (run
 	if err != nil {
 		return nil, err
 	}
+	if err := s.kind.decorate(ctx, c.obj); err != nil {
+		return nil, err
+	}
 	return c.obj, nil
 }
 
@@ -194,6 +198,7 @@ func (s *Store) List(ctx context.Context, opts *metainternalversion.ListOptions)
 
 	w := &where{}
 	w.scope(sc)
+	s.kind.readFilter(ctx, w)
 	w.labelSelector(opts.LabelSelector)
 	if err := w.fieldSelector(opts.FieldSelector, s.kind.FieldColumns); err != nil {
 		return nil, apierrors.NewBadRequest(err.Error())
@@ -263,6 +268,9 @@ func (s *Store) List(ctx context.Context, opts *metainternalversion.ListOptions)
 		return nil, s.dbErr(err, "")
 	}
 
+	if err := s.kind.decorate(ctx, items...); err != nil {
+		return nil, err
+	}
 	list := s.kind.NewListFunc()
 	if err := meta.SetList(list, items); err != nil {
 		return nil, err
@@ -288,6 +296,9 @@ func (s *Store) Create(ctx context.Context, obj runtime.Object, createValidation
 	err = s.db.InTx(ctx, func(ctx context.Context) error {
 		var err error
 		if out, err = s.create(ctx, sc, obj, createValidation, false); err != nil {
+			return err
+		}
+		if err := s.kind.decorate(ctx, out); err != nil {
 			return err
 		}
 		if opts != nil && len(opts.DryRun) > 0 {
@@ -326,6 +337,9 @@ func (s *Store) create(ctx context.Context, sc Scope, obj runtime.Object, create
 			return nil, err
 		}
 	}
+	if err := s.kind.beforeWrite(ctx, OpCreate, nil, obj); err != nil {
+		return nil, err
+	}
 
 	data, err := encode(obj)
 	if err != nil {
@@ -352,6 +366,9 @@ func (s *Store) create(ctx context.Context, sc Scope, obj runtime.Object, create
 		return nil, s.dbErr(err, m.GetName())
 	}
 	m.SetResourceVersion(strconv.FormatInt(rv, 10))
+	if err := s.kind.afterWrite(ctx, OpCreate, nil, obj); err != nil {
+		return nil, err
+	}
 	return obj, nil
 }
 
@@ -390,6 +407,9 @@ func (s *Store) Update(ctx context.Context, name string, objInfo rest.UpdatedObj
 			if out, err = s.update(ctx, cur, objInfo, updateValidation); err != nil {
 				return err
 			}
+		}
+		if err := s.kind.decorate(ctx, out); err != nil {
+			return err
 		}
 		if opts != nil && len(opts.DryRun) > 0 {
 			return errRollback
@@ -432,6 +452,9 @@ func (s *Store) update(ctx context.Context, cur *current, objInfo rest.UpdatedOb
 			return nil, err
 		}
 	}
+	if err := s.kind.beforeWrite(ctx, OpUpdate, old, obj); err != nil {
+		return nil, err
+	}
 
 	data, err := encode(obj)
 	if err != nil {
@@ -466,6 +489,9 @@ func (s *Store) update(ctx context.Context, cur *current, objInfo rest.UpdatedOb
 		return nil, s.dbErr(err, m.GetName())
 	}
 	m.SetResourceVersion(strconv.FormatInt(rv, 10))
+	if err := s.kind.afterWrite(ctx, OpUpdate, old, obj); err != nil {
+		return nil, err
+	}
 	return obj, nil
 }
 
@@ -502,10 +528,16 @@ func (s *Store) Delete(ctx context.Context, name string, deleteValidation rest.V
 				return err
 			}
 		}
+		if err := s.kind.beforeWrite(ctx, OpDelete, cur.obj, nil); err != nil {
+			return err
+		}
 		if _, err := s.db.Q(ctx).Exec(ctx,
 			fmt.Sprintf("DELETE FROM %s WHERE scope_type = $1 AND scope_name = $2 AND name = $3", s.table()),
 			cur.scope.Type, cur.scope.Name, name); err != nil {
 			return s.dbErr(err, name)
+		}
+		if err := s.kind.afterWrite(ctx, OpDelete, cur.obj, nil); err != nil {
+			return err
 		}
 		out = cur.obj
 		if opts != nil && len(opts.DryRun) > 0 {
