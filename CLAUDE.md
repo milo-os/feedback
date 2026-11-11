@@ -16,7 +16,14 @@ datum-cloud/enhancements#943.
 ## Rules that shape the code
 
 - `FeedbackSource` is stored in etcd through the generic registry. Every other
-  resource uses custom `rest.Storage` backed by Postgres.
+  resource uses `internal/storage/pg`: a generic Postgres `rest.Storage`
+  configured per kind with a `pg.Kind` (table, strategies, scope, extra
+  columns for field selectors). Tables are in `migrations/00002_objects.sql`.
+- Scope: posts, releases and changelog entries live in the platform scope;
+  user-owned kinds use `pg.UserOwned` (the caller in the user context, every
+  user in the platform context).
+- Side effects share the request's transaction: wrap them in `db.InTx(ctx, ...)`
+  and call other stores with that ctx.
 - The apiserver is the only component that connects to Postgres. Side effects
   of a request (e.g. the `Subscription` created with a `Vote`) are written in
   the same transaction.
