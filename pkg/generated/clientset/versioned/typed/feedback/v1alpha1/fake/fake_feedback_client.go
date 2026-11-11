@@ -12,8 +12,48 @@ type FakeFeedbackV1alpha1 struct {
 	*testing.Fake
 }
 
+func (c *FakeFeedbackV1alpha1) AttachmentUploads() v1alpha1.AttachmentUploadInterface {
+	return newFakeAttachmentUploads(c)
+}
+
+func (c *FakeFeedbackV1alpha1) ChangelogEntries() v1alpha1.ChangelogEntryInterface {
+	return newFakeChangelogEntries(c)
+}
+
 func (c *FakeFeedbackV1alpha1) FeedbackSources() v1alpha1.FeedbackSourceInterface {
 	return newFakeFeedbackSources(c)
+}
+
+func (c *FakeFeedbackV1alpha1) Posts() v1alpha1.PostInterface {
+	return newFakePosts(c)
+}
+
+func (c *FakeFeedbackV1alpha1) PostQueries() v1alpha1.PostQueryInterface {
+	return newFakePostQueries(c)
+}
+
+func (c *FakeFeedbackV1alpha1) Releases() v1alpha1.ReleaseInterface {
+	return newFakeReleases(c)
+}
+
+func (c *FakeFeedbackV1alpha1) SecurityAcknowledgements() v1alpha1.SecurityAcknowledgementInterface {
+	return newFakeSecurityAcknowledgements(c)
+}
+
+func (c *FakeFeedbackV1alpha1) SecurityReports() v1alpha1.SecurityReportInterface {
+	return newFakeSecurityReports(c)
+}
+
+func (c *FakeFeedbackV1alpha1) Submissions() v1alpha1.SubmissionInterface {
+	return newFakeSubmissions(c)
+}
+
+func (c *FakeFeedbackV1alpha1) Subscriptions() v1alpha1.SubscriptionInterface {
+	return newFakeSubscriptions(c)
+}
+
+func (c *FakeFeedbackV1alpha1) Votes() v1alpha1.VoteInterface {
+	return newFakeVotes(c)
 }
 
 // RESTClient returns a RESTClient that is used to communicate

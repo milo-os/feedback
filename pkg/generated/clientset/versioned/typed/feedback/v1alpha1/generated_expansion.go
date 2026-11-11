@@ -2,4 +2,24 @@
 
 package v1alpha1
 
+type AttachmentUploadExpansion interface{}
+
+type ChangelogEntryExpansion interface{}
+
 type FeedbackSourceExpansion interface{}
+
+type PostExpansion interface{}
+
+type PostQueryExpansion interface{}
+
+type ReleaseExpansion interface{}
+
+type SecurityAcknowledgementExpansion interface{}
+
+type SecurityReportExpansion interface{}
+
+type SubmissionExpansion interface{}
+
+type SubscriptionExpansion interface{}
+
+type VoteExpansion interface{}

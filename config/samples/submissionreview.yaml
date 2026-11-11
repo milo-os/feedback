@@ -1,0 +1,11 @@
+# Body of a create on submissions/{name}/review. Staff only.
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: SubmissionReview
+metadata:
+  name: sub-7f3k2
+spec:
+  decision: Approved
+  publicTitle: Region selection for Galactic VPC attachments
+  publicBody: |
+    ### Summary
+    Let users choose the region when attaching a VPC.

@@ -1,0 +1,13 @@
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: PostQuery
+metadata:
+  name: in-flight-deliver
+spec:
+  text: wildcard hostnames
+  filter:
+    state: [planning, on-deck, in-progress]
+    categories: [deliver]
+    orgs: [datum-cloud, milo-os]
+  sort: top
+  limit: 20
+  facets: [state, categories]

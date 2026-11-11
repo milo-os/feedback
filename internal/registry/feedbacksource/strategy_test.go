@@ -21,7 +21,7 @@ func validSource() *feedbackv1alpha1.FeedbackSource {
 				Milestones:     &feedbackv1alpha1.MilestoneSource{Repository: "enhancements"},
 				Changelog:      &feedbackv1alpha1.ChangelogSource{Repository: "datum", DiscussionCategory: "changelog"},
 			},
-			StatusMapping:   map[string]feedbackv1alpha1.PostStatus{"": "none", "In Progress": "in-progress", "Done": "shipped"},
+			StatusMapping:   map[string]feedbackv1alpha1.PostState{"": "none", "In Progress": "in-progress", "Done": "shipped"},
 			CategoryMapping: map[string]string{"Build": "build"},
 		},
 	}

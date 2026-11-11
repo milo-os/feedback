@@ -1,0 +1,6 @@
+# Body of a create on submissions/{name}/to-security-report. Staff only.
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: SubmissionToSecurityReport
+metadata:
+  name: sub-7f3k2
+affected: connectors

@@ -105,9 +105,9 @@ func Validate(src *feedbackv1alpha1.FeedbackSource) field.ErrorList {
 		}
 	}
 	for k, v := range spec.StatusMapping {
-		if !slices.Contains(feedbackv1alpha1.ValidPostStatuses, v) {
+		if !slices.Contains(feedbackv1alpha1.ValidPostStates, v) {
 			errs = append(errs, field.NotSupported(field.NewPath("spec", "statusMapping").Key(k), v,
-				feedbackv1alpha1.ValidPostStatuses))
+				feedbackv1alpha1.ValidPostStates))
 		}
 	}
 	for k, v := range spec.CategoryMapping {

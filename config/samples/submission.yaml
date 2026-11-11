@@ -1,0 +1,20 @@
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: Submission
+metadata:
+  generateName: sub-
+spec:
+  kind: idea
+  title: Let me pick the region for Galactic VPC attachments
+  body: |
+    When I attach a VPC I can't choose which region it lands in.
+  attachments:
+    - name: screenshot.png
+      contentType: image/png
+      uploadRef: att-91ac
+  context:
+    client: portal
+    pageURL: https://cloud.datum.net/org/acme/projects/web/vpc
+    organization: acme-corp
+    project: web
+    requestIDs: [req-01HZX]
+    clientVersion: cloud-portal@2026.10.1

@@ -1,0 +1,19 @@
+# Releases are written by feedback-sync. Shown here for reference.
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: Release
+metadata:
+  name: hedy-2-0
+status:
+  title: "Hedy: 2.0"
+  codename: Hedy
+  version: "2.0"
+  dueOn: "2026-10-31"
+  shipped: false
+  descriptionHTML: "<p>...</p>"
+  coverImage: hedy-2-0
+  posts:
+    - datum-cloud.enhancements.912
+    - datum-cloud.enhancements.913
+  github:
+    url: https://github.com/datum-cloud/enhancements/milestone/14
+    number: 14
