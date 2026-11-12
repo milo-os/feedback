@@ -6,6 +6,7 @@
 package openapi
 
 import (
+	v1alpha1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 	resource "k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -16,6 +17,7 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
+		v1alpha1.AttachmentOptions{}.OpenAPIModelName():                                     schema_pkg_apis_feedback_v1alpha1_AttachmentOptions(ref),
 		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentReference":           schema_pkg_apis_feedback_v1alpha1_AttachmentReference(ref),
 		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUpload":              schema_pkg_apis_feedback_v1alpha1_AttachmentUpload(ref),
 		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.AttachmentUploadList":          schema_pkg_apis_feedback_v1alpha1_AttachmentUploadList(ref),
@@ -151,6 +153,42 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		runtime.TypeMeta{}.OpenAPIModelName():                                               schema_k8sio_apimachinery_pkg_runtime_TypeMeta(ref),
 		runtime.Unknown{}.OpenAPIModelName():                                                schema_k8sio_apimachinery_pkg_runtime_Unknown(ref),
 		version.Info{}.OpenAPIModelName():                                                   schema_k8sio_apimachinery_pkg_version_Info(ref),
+	}
+}
+
+func schema_pkg_apis_feedback_v1alpha1_AttachmentOptions(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "AttachmentOptions are the query parameters of a GET on submissions/{name}/attachment, which returns one attached file.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ref": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Ref is the attachment's uploadRef.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"ref"},
+			},
+		},
 	}
 }
 

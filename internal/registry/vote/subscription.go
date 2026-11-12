@@ -96,7 +96,7 @@ func NewSubscriptionREST(db *pg.DB, typer runtime.ObjectTyper) (*SubscriptionRES
 				return nil
 			}
 			sub := obj.(*v1.Subscription)
-			return requirePost(ctx, db, v1.Kind("Subscription"), sub.Name, sub.Spec.PostRef.Name)
+			return CheckPost(ctx, db, v1.Kind("Subscription"), sub.Name, sub.Spec.PostRef.Name)
 		},
 		TableConvertor: subscriptionTable{},
 	})
@@ -106,10 +106,10 @@ func NewSubscriptionREST(db *pg.DB, typer runtime.ObjectTyper) (*SubscriptionRES
 	return &SubscriptionREST{Store: store}, nil
 }
 
-// follow subscribes the caller to postName, unless they already are. It runs
+// Follow subscribes the caller to postName, unless they already are. It runs
 // in ctx's transaction, in a savepoint so an existing subscription doesn't
 // abort it.
-func (r *SubscriptionREST) follow(ctx context.Context, postName string, reason v1.SubscriptionReason) error {
+func (r *SubscriptionREST) Follow(ctx context.Context, postName string, reason v1.SubscriptionReason) error {
 	sub := &v1.Subscription{
 		ObjectMeta: metav1.ObjectMeta{Name: postName},
 		Spec:       v1.SubscriptionSpec{PostRef: v1.PostReference{Name: postName}},

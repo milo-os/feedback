@@ -23,6 +23,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"go.miloapis.com/feedback/internal/embedding"
+	"go.miloapis.com/feedback/internal/ratelimit"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
@@ -45,7 +46,7 @@ type Options struct {
 	// earlier setting are skipped. Zero accepts whatever the embedder returns.
 	Dimensions int
 	// SimilarLimit rate limits similarTo per user. Nil doesn't limit.
-	SimilarLimit *Limiter
+	SimilarLimit *ratelimit.Limiter
 }
 
 // REST serves postqueries.

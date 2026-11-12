@@ -26,6 +26,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 
 	feedbackapiserver "go.miloapis.com/feedback/internal/apiserver"
+	"go.miloapis.com/feedback/internal/attachments"
 	"go.miloapis.com/feedback/internal/embedding"
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/postgres"
@@ -127,6 +128,7 @@ type serverOptions struct {
 	VoteRetention      time.Duration
 	Query              feedbackapiserver.QueryConfig
 	MiloKubeconfig     string
+	Submissions        feedbackapiserver.SubmissionConfig
 }
 
 func newServerOptions() *serverOptions {
@@ -144,6 +146,11 @@ func newServerOptions() *serverOptions {
 			EmbedInterval:    time.Minute,
 			SimilarPerMinute: 30,
 			SimilarBurst:     10,
+		},
+		Submissions: feedbackapiserver.SubmissionConfig{
+			AttachmentMaxSize: attachments.DefaultMaxSize,
+			Limit:             5,
+			Window:            10 * time.Minute,
 		},
 	}
 	// No admission plugins: validation lives in the registry strategies.
@@ -166,6 +173,15 @@ func (o *serverOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.VoteRetention, "vote-retention", o.VoteRetention,
 		"How long votes on a deleted post are kept in case it returns. 0 disables the purge.")
 	q := &o.Query
+	sc := &o.Submissions
+	fs.StringVar(&sc.AttachmentsBucket, "attachments-bucket", sc.AttachmentsBucket,
+		"Private bucket for attachments, as a URL: gs://bucket in clusters, file:///path or mem:// locally. "+
+			"Empty disables attachments. Give the bucket a lifecycle rule deleting uploads/ after a day.")
+	fs.IntVar(&sc.AttachmentMaxSize, "attachment-max-size", sc.AttachmentMaxSize,
+		"Largest attachment accepted, in bytes. Base64 adds a third, and requests are limited to 3 MiB.")
+	fs.IntVar(&sc.Limit, "submission-limit", sc.Limit,
+		"Submissions allowed per user per --submission-window, across replicas. 0 disables the limit.")
+	fs.DurationVar(&sc.Window, "submission-window", sc.Window, "Window for --submission-limit.")
 	fs.StringVar(&o.MiloKubeconfig, "milo-kubeconfig", o.MiloKubeconfig,
 		"Kubeconfig for the Milo API, used for the search service (PostQuery text) and for "+
 			"voters' organizations and linked GitHub usernames. Empty uses Postgres keyword "+
@@ -264,6 +280,7 @@ func (o *serverOptions) Config() (*feedbackapiserver.Config, error) {
 			VoteRetention:  o.VoteRetention,
 			Query:          o.Query,
 			MiloKubeconfig: o.MiloKubeconfig,
+			Submissions:    o.Submissions,
 		},
 	}, nil
 }

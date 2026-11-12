@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -22,20 +21,16 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/klog/v2"
 
+	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/milo"
 	"go.miloapis.com/feedback/internal/registry/post"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
-
-// EmailVerifiedExtraKey is set by Milo's identity provider on every human
-// identity, "true" or "false". Machine identities don't carry it.
-const EmailVerifiedExtraKey = "iam.miloapis.com/emailVerified"
 
 // lookupTimeout bounds the Milo lookups made while voting.
 const lookupTimeout = 3 * time.Second
@@ -145,14 +140,14 @@ func NewREST(db *pg.DB, typer runtime.ObjectTyper, users milo.Users, subs *Subsc
 			if err := requireVerifiedEmail(ctx, v.Name); err != nil {
 				return err
 			}
-			return requirePost(ctx, db, v1.Kind("Vote"), v.Name, v.Spec.PostRef.Name)
+			return CheckPost(ctx, db, v1.Kind("Vote"), v.Name, v.Spec.PostRef.Name)
 		},
 		AfterWrite: func(ctx context.Context, op pg.Op, old, obj runtime.Object) error {
 			var postName string
 			switch op {
 			case pg.OpCreate:
 				postName = obj.(*v1.Vote).Spec.PostRef.Name
-				if err := subs.follow(ctx, postName, v1.SubscriptionReasonVoted); err != nil {
+				if err := subs.Follow(ctx, postName, v1.SubscriptionReasonVoted); err != nil {
 					return err
 				}
 			case pg.OpDelete:
@@ -173,25 +168,16 @@ func NewREST(db *pg.DB, typer runtime.ObjectTyper, users milo.Users, subs *Subsc
 	return &REST{Store: store}, nil
 }
 
-// requireVerifiedEmail rejects people whose email isn't verified. Machine
-// identities carry no verdict and pass, as in Milo's own admission check.
+// requireVerifiedEmail rejects people whose email isn't verified.
 func requireVerifiedEmail(ctx context.Context, name string) error {
-	u, ok := request.UserFrom(ctx)
-	if !ok {
-		return nil
-	}
-	// Extras reach an aggregated API as request headers, which lower-cases
-	// their keys, so match the key case-insensitively.
-	for k, vals := range u.GetExtra() {
-		if strings.EqualFold(k, EmailVerifiedExtraKey) && !(len(vals) == 1 && vals[0] == "true") {
-			return apierrors.NewForbidden(v1.Resource("votes"), name, errors.New("verify your email address to vote"))
-		}
+	if identity.EmailUnverified(ctx) {
+		return apierrors.NewForbidden(v1.Resource("votes"), name, errors.New("verify your email address to vote"))
 	}
 	return nil
 }
 
-// requirePost checks the post exists, is visible and hasn't been merged.
-func requirePost(ctx context.Context, db *pg.DB, kind schema.GroupKind, name, postName string) error {
+// CheckPost checks the post exists, is visible and hasn't been merged.
+func CheckPost(ctx context.Context, db *pg.DB, kind schema.GroupKind, name, postName string) error {
 	var hidden bool
 	var mergedInto string
 	err := db.Q(ctx).QueryRow(ctx, `SELECT hidden, coalesce(object->'status'->>'mergedInto', '')

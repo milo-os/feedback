@@ -70,3 +70,20 @@ type AttachmentUploadList struct {
 
 	Items []AttachmentUpload `json:"items"`
 }
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// AttachmentOptions are the query parameters of a GET on
+// submissions/{name}/attachment, which returns one attached file.
+type AttachmentOptions struct {
+	metav1.TypeMeta `json:",inline"`
+
+	// Ref is the attachment's uploadRef.
+	Ref string `json:"ref"`
+}
+
+// OpenAPIModelName overrides the name promoted from the embedded TypeMeta,
+// which would otherwise make this type's OpenAPI definition TypeMeta's.
+func (AttachmentOptions) OpenAPIModelName() string {
+	return "com.miloapis.go.feedback.pkg.apis.feedback.v1alpha1.AttachmentOptions"
+}
