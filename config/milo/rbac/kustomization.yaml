@@ -1,0 +1,9 @@
+# Kubernetes RBAC in Milo for the service's own components, which
+# authenticate with client certificates rather than as Milo users.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - feedback-sync.yaml
+  - feedback-controller.yaml
+  - feedback-apiserver.yaml

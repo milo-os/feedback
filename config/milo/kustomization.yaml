@@ -1,6 +1,11 @@
+# What the service registers in Milo: ProtectedResources and Roles (iam/),
+# where resources appear (discovery/), and Kubernetes RBAC for the service's
+# own components (rbac/). bindings/ is separate and optional: who holds the
+# roles is the deployment's choice.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
 components:
   - iam/
   - discovery/
+  - rbac/

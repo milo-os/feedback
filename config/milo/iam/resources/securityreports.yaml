@@ -1,0 +1,29 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: feedback.miloapis.com-securityreports
+spec:
+  serviceRef:
+    name: "feedback.miloapis.com"
+  kind: SecurityReport
+  plural: securityreports
+  singular: securityreport
+  subresources:
+    - name: status
+      permissions:
+        - get
+        - update
+        - patch
+    - name: attachment
+      permissions:
+        - get
+  permissions:
+    - get
+    - list
+    - create
+    - update
+    - patch
+    - delete
+  parentResources:
+    - apiGroup: iam.miloapis.com
+      kind: User

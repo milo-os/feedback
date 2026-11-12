@@ -46,6 +46,42 @@ config/milo/             Milo IAM ProtectedResources, Roles, discovery
 config/samples/          example resources
 ```
 
+## Access
+
+`config/milo` registers the service with Milo:
+
+- `iam/`: a `ProtectedResource` per kind (users act on their own `User`;
+  staff act platform-wide) and roles:
+
+  | Role | For |
+  | --- | --- |
+  | `feedback.miloapis.com-user` | every signed-in user, in their own user context |
+  | `feedback.miloapis.com-public-reader` | the website: visible posts, releases, changelog, acknowledgements |
+  | `feedback.miloapis.com-viewer` | staff read access, including hidden posts |
+  | `feedback.miloapis.com-reviewer` | the feedback queue: submissions, reviews, hiding posts |
+  | `feedback.miloapis.com-editor`, `-admin` | managing `FeedbackSource`s |
+  | `feedback.miloapis.com-security-team` | security reports; no other role can see them |
+
+- `rbac/`: Kubernetes RBAC in Milo for the service's own components, which
+  authenticate with client certificates:
+  `system:feedback-sync@feedback.miloapis.com`,
+  `system:feedback-controller@feedback.miloapis.com` and
+  `system:feedback-apiserver@feedback.miloapis.com`. Each is limited to its
+  own reads and writes; none needs `system:masters`.
+- `discovery/`: everything users touch appears in the platform and user
+  contexts; `FeedbackSource` only in the platform context.
+- `bindings/` (optional): the `feedback-security-team` group with the
+  security-team role, and the reviewer role for `staff-users`.
+
+Users get the user role by adding it to `inheritedRoles` of Milo's
+`iam-user-self-manage` role. That role is shared with other services, so
+the deployment patches it and keeps their entries.
+
+The apiserver enforces the contexts too: votes and subscriptions change
+only in their owner's context, submissions and security reports are created
+only by their author (or logged by the Security Team), and
+`FeedbackSource` is platform-only.
+
 ## Postgres
 
 The apiserver is the only component that connects to Postgres. Other
@@ -64,8 +100,10 @@ migrating at the same time. Add a migration as the next numbered file in
 ## Who writes what
 
 `feedback-sync` and `feedback-controller` are recognised by username
-(`--sync-users`, `--controller-users`; defaults are the `feedback-system`
-service accounts). On top of Milo's IAM:
+(`--sync-users`, `--controller-users`). The defaults are the common names of
+the client certificates they present to Milo:
+`system:feedback-sync@feedback.miloapis.com` and
+`system:feedback-controller@feedback.miloapis.com`. On top of Milo's IAM:
 
 - Only `feedback-sync` creates and deletes posts, and writes releases and
   changelog entries.
@@ -74,9 +112,11 @@ service accounts). On top of Milo's IAM:
   history, `highestNotified` and part-shipped records; the server computes
   vote counts. Fields a caller doesn't own are ignored, like spec on a
   status update. Anyone else gets Forbidden on post status.
-- Staff can change `spec.hidden` and metadata. Hidden posts are NotFound
-  outside the platform context and never listed on releases or changelog
-  entries.
+- Staff can change `spec.hidden` and metadata. Hidden posts are visible only
+  to callers allowed `get` on `posts/hidden` (staff, sync, the controller),
+  in any context; everyone else, the website included, gets NotFound. They
+  are never listed on releases or changelog entries or returned by
+  `PostQuery`.
 - `Release.status.posts` and `ChangelogEntry.status.posts` are derived from
   the posts table on every read.
 - Votes on a deleted post are kept for `--vote-retention` (30 days) in case

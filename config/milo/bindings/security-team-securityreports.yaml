@@ -1,0 +1,17 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: PolicyBinding
+metadata:
+  name: feedback-security-team-securityreports
+  namespace: milo-system
+spec:
+  roleRef:
+    name: feedback.miloapis.com-security-team
+    namespace: milo-system
+  subjects:
+    - kind: Group
+      name: feedback-security-team
+      namespace: milo-system
+  resourceSelector:
+    resourceKind:
+      apiGroup: feedback.miloapis.com
+      kind: SecurityReport

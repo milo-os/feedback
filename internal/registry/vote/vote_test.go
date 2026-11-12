@@ -426,3 +426,22 @@ func TestSubscriptions(t *testing.T) {
 		t.Errorf("after delete: %v", err)
 	}
 }
+
+func TestStaffReadOnly(t *testing.T) {
+	e := setup(t, fakeUsers{})
+	p := e.addPost(t, 1, 0)
+	v := e.vote(t, alice, p)
+	if _, _, err := e.votes.Delete(staff, p, nil, &metav1.DeleteOptions{}); !apierrors.IsForbidden(err) {
+		t.Errorf("staff delete vote: %v", err)
+	}
+	if _, _, err := e.subs.Delete(staff, p, nil, &metav1.DeleteOptions{}); !apierrors.IsForbidden(err) {
+		t.Errorf("staff delete subscription: %v", err)
+	}
+	v.Labels = map[string]string{"x": "y"}
+	if _, _, err := e.votes.Update(staff, p, rest.DefaultUpdatedObjectInfo(v), nil, nil, false, &metav1.UpdateOptions{}); !apierrors.IsForbidden(err) {
+		t.Errorf("staff update vote: %v", err)
+	}
+	if _, _, err := e.votes.Update(alice, p, rest.DefaultUpdatedObjectInfo(v), nil, nil, false, &metav1.UpdateOptions{}); err != nil {
+		t.Errorf("owner labels own vote: %v", err)
+	}
+}

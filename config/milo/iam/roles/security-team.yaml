@@ -1,0 +1,26 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: feedback.miloapis.com-security-team
+  namespace: milo-system
+  labels:
+    app.kubernetes.io/name: security-team
+    app.kubernetes.io/part-of: feedback.miloapis.com
+  annotations:
+    kubernetes.io/display-name: Feedback Security Team
+    kubernetes.io/description: "Works vulnerability reports: reads every report, logs reports from email and GitHub, writes status, and reads attachments. Separate from feedback reviewers."
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - feedback.miloapis.com/securityreports.get
+    - feedback.miloapis.com/securityreports.list
+    - feedback.miloapis.com/securityreports.create
+    - feedback.miloapis.com/securityreports.update
+    - feedback.miloapis.com/securityreports.patch
+    - feedback.miloapis.com/securityreports.delete
+    - feedback.miloapis.com/securityreports/status.get
+    - feedback.miloapis.com/securityreports/status.update
+    - feedback.miloapis.com/securityreports/status.patch
+    - feedback.miloapis.com/securityreports/attachment.get
+    - feedback.miloapis.com/securityacknowledgements.get
+    - feedback.miloapis.com/securityacknowledgements.list

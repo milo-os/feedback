@@ -1,0 +1,16 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: feedback.miloapis.com-securityacknowledgements
+spec:
+  serviceRef:
+    name: "feedback.miloapis.com"
+  kind: SecurityAcknowledgement
+  plural: securityacknowledgements
+  singular: securityacknowledgement
+  permissions:
+    - get
+    - list
+  parentResources:
+    - apiGroup: iam.miloapis.com
+      kind: User

@@ -1,0 +1,44 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: feedback.miloapis.com-user
+  namespace: milo-system
+  labels:
+    app.kubernetes.io/name: user
+    app.kubernetes.io/part-of: feedback.miloapis.com
+  annotations:
+    kubernetes.io/display-name: Feedback User
+    kubernetes.io/description: "What every signed-in user can do with feedback in their own user context: browse and search posts, vote, follow, send feedback and security reports, and read their own."
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - feedback.miloapis.com/posts.get
+    - feedback.miloapis.com/posts.list
+    - feedback.miloapis.com/postqueries.create
+    - feedback.miloapis.com/releases.get
+    - feedback.miloapis.com/releases.list
+    - feedback.miloapis.com/changelogentries.get
+    - feedback.miloapis.com/changelogentries.list
+    - feedback.miloapis.com/votes.get
+    - feedback.miloapis.com/votes.list
+    - feedback.miloapis.com/votes.create
+    - feedback.miloapis.com/votes.update
+    - feedback.miloapis.com/votes.patch
+    - feedback.miloapis.com/votes.delete
+    - feedback.miloapis.com/subscriptions.get
+    - feedback.miloapis.com/subscriptions.list
+    - feedback.miloapis.com/subscriptions.create
+    - feedback.miloapis.com/subscriptions.update
+    - feedback.miloapis.com/subscriptions.patch
+    - feedback.miloapis.com/subscriptions.delete
+    - feedback.miloapis.com/attachmentuploads.create
+    - feedback.miloapis.com/submissions.get
+    - feedback.miloapis.com/submissions.list
+    - feedback.miloapis.com/submissions.create
+    - feedback.miloapis.com/submissions/attachment.get
+    - feedback.miloapis.com/securityreports.get
+    - feedback.miloapis.com/securityreports.list
+    - feedback.miloapis.com/securityreports.create
+    - feedback.miloapis.com/securityreports/attachment.get
+    - feedback.miloapis.com/securityacknowledgements.get
+    - feedback.miloapis.com/securityacknowledgements.list

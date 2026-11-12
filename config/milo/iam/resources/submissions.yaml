@@ -1,0 +1,37 @@
+# review and to-security-report are staff decisions; attachment serves a
+# submission's files.
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: feedback.miloapis.com-submissions
+spec:
+  serviceRef:
+    name: "feedback.miloapis.com"
+  kind: Submission
+  plural: submissions
+  singular: submission
+  subresources:
+    - name: status
+      permissions:
+        - get
+        - update
+        - patch
+    - name: review
+      permissions:
+        - create
+    - name: attachment
+      permissions:
+        - get
+    - name: to-security-report
+      permissions:
+        - create
+  permissions:
+    - get
+    - list
+    - create
+    - update
+    - patch
+    - delete
+  parentResources:
+    - apiGroup: iam.miloapis.com
+      kind: User

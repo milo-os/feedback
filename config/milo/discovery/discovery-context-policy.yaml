@@ -4,8 +4,26 @@ metadata:
   name: feedback-service
 spec:
   rules:
-    # FeedbackSource is staff configuration. User-context resources (Vote,
-    # Submission, Subscription, ...) get their own rules as they are added.
+    # What a signed-in user works with in their own context: browsing and
+    # voting, following, and sending feedback and security reports.
     - group: feedback.miloapis.com
-      resources: ["feedbacksources"]
-      contexts: ["Platform"]
+      resources:
+        - posts
+        - postqueries
+        - releases
+        - changelogentries
+        - votes
+        - subscriptions
+        - attachmentuploads
+        - submissions
+        - securityreports
+        - securityacknowledgements
+      contexts:
+        - Platform
+        - User
+    # Staff configuration.
+    - group: feedback.miloapis.com
+      resources:
+        - feedbacksources
+      contexts:
+        - Platform

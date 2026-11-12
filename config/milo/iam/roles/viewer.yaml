@@ -6,6 +6,9 @@ metadata:
   labels:
     app.kubernetes.io/name: viewer
     app.kubernetes.io/part-of: feedback.miloapis.com
+  annotations:
+    kubernetes.io/display-name: Feedback Viewer
+    kubernetes.io/description: "Staff read access to feedback: sources, every post including hidden ones, releases, changelog entries, and votes and subscriptions across users. No submissions or security reports."
 spec:
   launchStage: Alpha
   includedPermissions:
@@ -13,3 +16,20 @@ spec:
     - feedback.miloapis.com/feedbacksources.list
     - feedback.miloapis.com/feedbacksources.watch
     - feedback.miloapis.com/feedbacksources/status.get
+    - feedback.miloapis.com/posts.get
+    - feedback.miloapis.com/posts.list
+    - feedback.miloapis.com/posts/status.get
+    - feedback.miloapis.com/posts/hidden.get
+    - feedback.miloapis.com/postqueries.create
+    - feedback.miloapis.com/releases.get
+    - feedback.miloapis.com/releases.list
+    - feedback.miloapis.com/releases/status.get
+    - feedback.miloapis.com/changelogentries.get
+    - feedback.miloapis.com/changelogentries.list
+    - feedback.miloapis.com/changelogentries/status.get
+    - feedback.miloapis.com/votes.get
+    - feedback.miloapis.com/votes.list
+    - feedback.miloapis.com/subscriptions.get
+    - feedback.miloapis.com/subscriptions.list
+    - feedback.miloapis.com/securityacknowledgements.get
+    - feedback.miloapis.com/securityacknowledgements.list

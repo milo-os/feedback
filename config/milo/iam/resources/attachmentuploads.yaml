@@ -1,0 +1,15 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: feedback.miloapis.com-attachmentuploads
+spec:
+  serviceRef:
+    name: "feedback.miloapis.com"
+  kind: AttachmentUpload
+  plural: attachmentuploads
+  singular: attachmentupload
+  permissions:
+    - create
+  parentResources:
+    - apiGroup: iam.miloapis.com
+      kind: User

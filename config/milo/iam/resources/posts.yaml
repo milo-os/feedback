@@ -1,0 +1,32 @@
+# posts/hidden is a virtual subresource: the apiserver asks whether the
+# caller may get it before showing hidden posts. Grant it to staff and the
+# service's own components only.
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: feedback.miloapis.com-posts
+spec:
+  serviceRef:
+    name: "feedback.miloapis.com"
+  kind: Post
+  plural: posts
+  singular: post
+  subresources:
+    - name: status
+      permissions:
+        - get
+        - update
+        - patch
+    - name: hidden
+      permissions:
+        - get
+  permissions:
+    - get
+    - list
+    - create
+    - update
+    - patch
+    - delete
+  parentResources:
+    - apiGroup: iam.miloapis.com
+      kind: User

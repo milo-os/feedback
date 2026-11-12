@@ -1,0 +1,20 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: feedback.miloapis.com-subscriptions
+spec:
+  serviceRef:
+    name: "feedback.miloapis.com"
+  kind: Subscription
+  plural: subscriptions
+  singular: subscription
+  permissions:
+    - get
+    - list
+    - create
+    - update
+    - patch
+    - delete
+  parentResources:
+    - apiGroup: iam.miloapis.com
+      kind: User

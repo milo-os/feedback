@@ -134,7 +134,7 @@ func NewREST(db *pg.DB, typer runtime.ObjectTyper, users milo.Users, subs *Subsc
 		FieldColumns: map[string]string{"spec.postRef.name": "post_name"},
 		BeforeWrite: func(ctx context.Context, op pg.Op, _, obj runtime.Object) error {
 			if op != pg.OpCreate {
-				return nil
+				return userOnly(ctx)
 			}
 			v := obj.(*v1.Vote)
 			if err := requireVerifiedEmail(ctx, v.Name); err != nil {
@@ -166,6 +166,15 @@ func NewREST(db *pg.DB, typer runtime.ObjectTyper, users milo.Users, subs *Subsc
 		return nil, err
 	}
 	return &REST{Store: store}, nil
+}
+
+// userOnly keeps changes to votes and subscriptions with their owner: staff
+// can list them in the platform context but not change or delete them.
+func userOnly(ctx context.Context) error {
+	if kind, _ := pg.RequestContext(ctx); kind != pg.ScopeUser {
+		return apierrors.NewForbidden(v1.Resource("votes"), "", errors.New("votes and subscriptions are changed only by their owner"))
+	}
+	return nil
 }
 
 // requireVerifiedEmail rejects people whose email isn't verified.

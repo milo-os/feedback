@@ -15,10 +15,10 @@ spec:
         - update
         - patch
   permissions:
-    - list
     - get
+    - list
     - create
     - update
-    - delete
     - patch
+    - delete
     - watch

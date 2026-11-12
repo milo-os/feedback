@@ -1,0 +1,23 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: feedback.miloapis.com-public-reader
+  namespace: milo-system
+  labels:
+    app.kubernetes.io/name: public-reader
+    app.kubernetes.io/part-of: feedback.miloapis.com
+  annotations:
+    kubernetes.io/display-name: Feedback Public Reader
+    kubernetes.io/description: "Reads what datum.net shows: visible posts, releases, changelog entries and security acknowledgements."
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - feedback.miloapis.com/posts.get
+    - feedback.miloapis.com/posts.list
+    - feedback.miloapis.com/postqueries.create
+    - feedback.miloapis.com/releases.get
+    - feedback.miloapis.com/releases.list
+    - feedback.miloapis.com/changelogentries.get
+    - feedback.miloapis.com/changelogentries.list
+    - feedback.miloapis.com/securityacknowledgements.get
+    - feedback.miloapis.com/securityacknowledgements.list

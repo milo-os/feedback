@@ -24,12 +24,22 @@ type Identities struct {
 	Controller []string
 }
 
-// Default usernames, matching the Kubernetes service accounts in
-// feedback-system. Override with flags where Milo names them differently.
+// Default usernames: the common names of the client certificates the
+// components present to Milo, which forwards them as the username. They
+// match the subjects of the ClusterRoleBindings in config/milo/rbac.
 var Default = Identities{
-	Sync:       []string{"system:serviceaccount:feedback-system:feedback-sync"},
-	Controller: []string{"system:serviceaccount:feedback-system:feedback-controller"},
+	Sync:       []string{SyncUser},
+	Controller: []string{ControllerUser},
 }
+
+// Usernames of the service's components in Milo.
+const (
+	SyncUser       = "system:feedback-sync@feedback.miloapis.com"
+	ControllerUser = "system:feedback-controller@feedback.miloapis.com"
+	// APIServerUser is the apiserver itself, calling Milo for search and
+	// user lookups.
+	APIServerUser = "system:feedback-apiserver@feedback.miloapis.com"
+)
 
 // Caller is who a request comes from, as far as field ownership goes.
 type Caller int

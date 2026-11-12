@@ -1,0 +1,33 @@
+# feedback-controller tracks delivery on posts, triages submissions, and
+# sends notifications and digests, so it reads subscriptions, votes and
+# security reports. It writes only post and submission status.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: feedback.miloapis.com:controller
+rules:
+  - apiGroups: [feedback.miloapis.com]
+    resources: [posts, releases, changelogentries, submissions, votes, subscriptions, securityreports, feedbacksources]
+    verbs: [get, list]
+  - apiGroups: [feedback.miloapis.com]
+    resources: [posts/status, submissions/status]
+    verbs: [get, update, patch]
+  - apiGroups: [feedback.miloapis.com]
+    resources: [posts/hidden]
+    verbs: [get]
+  - apiGroups: [feedback.miloapis.com]
+    resources: [postqueries]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: feedback.miloapis.com:controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: feedback.miloapis.com:controller
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:feedback-controller@feedback.miloapis.com
