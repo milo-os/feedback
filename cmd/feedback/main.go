@@ -26,6 +26,7 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 
 	feedbackapiserver "go.miloapis.com/feedback/internal/apiserver"
+	"go.miloapis.com/feedback/internal/embedding"
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/postgres"
 	"go.miloapis.com/feedback/internal/version"
@@ -124,6 +125,7 @@ type serverOptions struct {
 	Postgres           postgres.Config
 	Identities         identity.Identities
 	VoteRetention      time.Duration
+	Query              feedbackapiserver.QueryConfig
 }
 
 func newServerOptions() *serverOptions {
@@ -136,6 +138,12 @@ func newServerOptions() *serverOptions {
 		Postgres:      postgres.Config{MaxConns: 20, ConnectTimeout: 10 * time.Second},
 		Identities:    identity.Default,
 		VoteRetention: 30 * 24 * time.Hour,
+		Query: feedbackapiserver.QueryConfig{
+			Embedding:        embedding.Config{Timeout: 10 * time.Second},
+			EmbedInterval:    time.Minute,
+			SimilarPerMinute: 30,
+			SimilarBurst:     10,
+		},
 	}
 	// No admission plugins: validation lives in the registry strategies.
 	o.RecommendedOptions.Admission = nil
@@ -156,6 +164,27 @@ func (o *serverOptions) AddFlags(fs *pflag.FlagSet) {
 		"Usernames of feedback-controller, which owns delivery tracking on posts.")
 	fs.DurationVar(&o.VoteRetention, "vote-retention", o.VoteRetention,
 		"How long votes on a deleted post are kept in case it returns. 0 disables the purge.")
+	q := &o.Query
+	fs.StringVar(&q.SearchKubeconfig, "search-kubeconfig", q.SearchKubeconfig,
+		"Kubeconfig for the Milo API whose search service answers PostQuery text. "+
+			"Empty uses Postgres keyword matching instead.")
+	fs.StringVar(&q.Embedding.URL, "ai-gateway-url", q.Embedding.URL,
+		"Base URL of the OpenAI-compatible AI gateway, including /v1. "+
+			"Empty disables embeddings: similarTo uses keyword matching.")
+	fs.StringVar(&q.Embedding.TokenFile, "ai-gateway-token-file", q.Embedding.TokenFile,
+		"File holding the AI gateway bearer token (a projected service account token), re-read on each request.")
+	fs.StringVar(&q.Embedding.Model, "embedding-model", q.Embedding.Model,
+		"Embedding model to request from the AI gateway. Changing it re-embeds every post.")
+	fs.IntVar(&q.Embedding.Dimensions, "embedding-dimensions", q.Embedding.Dimensions,
+		"Vector length to request, for models that support shortening. 0 uses the model's default.")
+	fs.DurationVar(&q.Embedding.Timeout, "embedding-timeout", q.Embedding.Timeout,
+		"Timeout for each AI gateway request.")
+	fs.DurationVar(&q.EmbedInterval, "embed-interval", q.EmbedInterval,
+		"How often new and changed posts are embedded.")
+	fs.Float64Var(&q.SimilarPerMinute, "similar-to-rate", q.SimilarPerMinute,
+		"PostQuery similarTo requests allowed per user per minute, per replica. 0 disables the limit.")
+	fs.IntVar(&q.SimilarBurst, "similar-to-burst", q.SimilarBurst,
+		"Burst size for the similarTo rate limit.")
 }
 
 func (o *serverOptions) Complete() error {
@@ -170,6 +199,12 @@ func (o *serverOptions) Validate() error {
 	errs = append(errs, o.RecommendedOptions.Validate()...)
 	if err := o.Postgres.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("--postgres-dsn: %w", err))
+	}
+	if e := o.Query.Embedding; (e.URL == "") != (e.Model == "") {
+		errs = append(errs, fmt.Errorf("--ai-gateway-url and --embedding-model must be set together"))
+	}
+	if o.Query.EmbedInterval <= 0 {
+		errs = append(errs, fmt.Errorf("--embed-interval must be positive"))
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("invalid options: %v", errs)
@@ -225,6 +260,7 @@ func (o *serverOptions) Config() (*feedbackapiserver.Config, error) {
 			Postgres:      o.Postgres,
 			Identities:    o.Identities,
 			VoteRetention: o.VoteRetention,
+			Query:         o.Query,
 		},
 	}, nil
 }

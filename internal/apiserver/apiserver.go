@@ -15,10 +15,12 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/klog/v2"
 
+	"go.miloapis.com/feedback/internal/embedding"
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/postgres"
 	"go.miloapis.com/feedback/internal/registry/feedbacksource"
 	"go.miloapis.com/feedback/internal/registry/post"
+	"go.miloapis.com/feedback/internal/registry/postquery"
 	"go.miloapis.com/feedback/internal/registry/release"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	"go.miloapis.com/feedback/pkg/apis/feedback/install"
@@ -61,6 +63,23 @@ type ExtraConfig struct {
 	// VoteRetention is how long votes on a deleted post are kept in case the
 	// post comes back.
 	VoteRetention time.Duration
+	// Query configures PostQuery's search, embeddings and rate limit.
+	Query QueryConfig
+}
+
+// QueryConfig configures PostQuery.
+type QueryConfig struct {
+	// SearchKubeconfig reaches the Milo API whose search service answers
+	// spec.text. Empty uses Postgres keyword matching.
+	SearchKubeconfig string
+	// Embedding reaches the AI gateway for similarTo. Disabled when its URL
+	// is empty; similarTo then uses keyword matching.
+	Embedding embedding.Config
+	// EmbedInterval is how often new and changed posts are embedded.
+	EmbedInterval time.Duration
+	// SimilarPerMinute and SimilarBurst rate limit similarTo per user.
+	SimilarPerMinute float64
+	SimilarBurst     int
 }
 
 // Config combines the generic and feedback-specific configuration.
@@ -149,8 +168,32 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 	v1alpha1Storage["changelogentries"] = changelog.Store
 	v1alpha1Storage["changelogentries/status"] = changelog.Status
 
-	// Other Postgres-backed resources (PostQuery, Vote, Submission, ...) are
-	// added here as they are implemented. See datum-cloud/enhancements#943.
+	qc := c.ExtraConfig.Query
+	queryOpts := postquery.Options{
+		Dimensions:   qc.Embedding.Dimensions,
+		SimilarLimit: postquery.NewLimiter(qc.SimilarPerMinute, qc.SimilarBurst),
+	}
+	if qc.SearchKubeconfig != "" {
+		search, err := postquery.NewSearchService(qc.SearchKubeconfig)
+		if err != nil {
+			pool.Close()
+			return nil, err
+		}
+		queryOpts.Search = search
+	} else {
+		klog.Info("No --search-kubeconfig: PostQuery text uses Postgres keyword matching")
+	}
+	var embedder *embedding.Client
+	if qc.Embedding.Enabled() {
+		embedder = embedding.NewClient(qc.Embedding)
+		queryOpts.Embedder = embedder
+	} else {
+		klog.Info("No AI gateway configured: PostQuery similarTo uses keyword matching")
+	}
+	v1alpha1Storage["postqueries"] = postquery.NewREST(db, queryOpts)
+
+	// Other Postgres-backed resources (Vote, Submission, ...) are added here
+	// as they are implemented. See datum-cloud/enhancements#943.
 
 	apiGroupInfo.VersionedResourcesStorageMap[feedbackv1alpha1.SchemeGroupVersion.Version] = v1alpha1Storage
 	if err := genericServer.InstallAPIGroup(&apiGroupInfo); err != nil {
@@ -163,6 +206,14 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 		go runVoteRetention(hc.Context, db, retention)
 		return nil
 	})
+
+	if embedder != nil {
+		interval := qc.EmbedInterval
+		genericServer.AddPostStartHookOrDie("feedback-embed-posts", func(hc genericapiserver.PostStartHookContext) error {
+			go embedding.Run(hc.Context, db, embedder, interval)
+			return nil
+		})
+	}
 
 	klog.Info("Feedback server initialized")
 	return s, nil
