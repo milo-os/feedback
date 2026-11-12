@@ -21,6 +21,7 @@ import (
 
 	"go.miloapis.com/feedback/internal/embedding"
 	"go.miloapis.com/feedback/internal/identity"
+	"go.miloapis.com/feedback/internal/ratelimit"
 	"go.miloapis.com/feedback/internal/registry/post"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	"go.miloapis.com/feedback/internal/storage/pg/pgtest"
@@ -415,7 +416,7 @@ func TestSimilarTo(t *testing.T) {
 
 func TestSimilarToRateLimit(t *testing.T) {
 	e := setup(t)
-	r := NewREST(e.db, Options{SimilarLimit: NewLimiter(1, 1)})
+	r := NewREST(e.db, Options{SimilarLimit: ratelimit.NewLimiter(1, 1)})
 	run(t, r, alice, v1.PostQuerySpec{SimilarTo: "dns"})
 	_, err := r.Create(alice, &v1.PostQuery{Spec: v1.PostQuerySpec{SimilarTo: "dns"}}, nil, nil)
 	if !apierrors.IsTooManyRequests(err) {
@@ -506,31 +507,5 @@ func TestSearchServiceClient(t *testing.T) {
 	}
 	if _, err := s.Search(context.Background(), "error", 10); err == nil || !strings.Contains(err.Error(), "nope") {
 		t.Errorf("error status: %v", err)
-	}
-}
-
-func TestLimiter(t *testing.T) {
-	if ok, _ := (*Limiter)(nil).Allow("x"); !ok {
-		t.Fatal("nil limiter must allow")
-	}
-	now := time.Unix(0, 0)
-	l := NewLimiter(60, 2) // one a second, bursts of two
-	l.now = func() time.Time { return now }
-	for i, want := range []bool{true, true, false} {
-		if ok, _ := l.Allow("a"); ok != want {
-			t.Fatalf("call %d: %v", i, ok)
-		}
-	}
-	if ok, wait := l.Allow("a"); ok || wait <= 0 || wait > time.Second {
-		t.Fatalf("wait %v", wait)
-	}
-	now = now.Add(time.Second)
-	if ok, _ := l.Allow("a"); !ok {
-		t.Fatal("token not refilled")
-	}
-	now = now.Add(idle + time.Second)
-	l.Allow("b")
-	if _, ok := l.users["a"]; ok {
-		t.Error("idle bucket not swept")
 	}
 }

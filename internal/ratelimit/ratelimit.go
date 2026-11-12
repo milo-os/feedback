@@ -1,4 +1,5 @@
-package postquery
+// Package ratelimit is a per-user token bucket.
+package ratelimit
 
 import (
 	"sync"

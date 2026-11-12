@@ -2,9 +2,11 @@ package v1alpha1
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -64,8 +66,21 @@ var FieldSelectors = map[string][]string{
 	"Release":        {"status.shipped"},
 }
 
+// ParameterTypes are query parameter types for subresources. They are
+// registered with a conversion from url.Values but aren't resources.
+func ParameterTypes() []runtime.Object {
+	return []runtime.Object{&AttachmentOptions{}}
+}
+
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion, KnownTypes()...)
+	scheme.AddKnownTypes(SchemeGroupVersion, ParameterTypes()...)
+	if err := scheme.AddConversionFunc((*url.Values)(nil), (*AttachmentOptions)(nil), func(a, b any, _ conversion.Scope) error {
+		b.(*AttachmentOptions).Ref = a.(*url.Values).Get("ref")
+		return nil
+	}); err != nil {
+		return err
+	}
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return AddFieldLabelConversions(scheme, SchemeGroupVersion)
 }

@@ -18,7 +18,7 @@ entries. It runs as an aggregated API server under Milo, like
 
 Early. Every resource in the design has a v1alpha1 type in
 `pkg/apis/feedback/v1alpha1` and a sample in `config/samples`, and the server
-serves `FeedbackSource`, `Post`, `PostQuery`, `Release`, `ChangelogEntry`, `Vote` and `Subscription`. Storage for the rest is tracked as
+serves everything except `SecurityReport` and `SecurityAcknowledgement`. Storage for the rest is tracked as
 sub-issues of the epic.
 
 | Resource | Storage | State |
@@ -27,7 +27,8 @@ sub-issues of the epic.
 | `Post`, `Release`, `ChangelogEntry` | Postgres | served |
 | `PostQuery` | Postgres (not stored) | served |
 | `Vote`, `Subscription` | Postgres | served |
-| `Submission`, `SecurityReport`, `SecurityAcknowledgement` | Postgres | planned |
+| `Submission`, `AttachmentUpload` | Postgres, bucket | served |
+| `SecurityReport`, `SecurityAcknowledgement` | Postgres | planned |
 
 ## Layout
 
@@ -133,6 +134,40 @@ The gateway is any OpenAI-compatible `/embeddings` endpoint:
 `--ai-gateway-url` (including `/v1`), `--embedding-model`, and
 `--ai-gateway-token-file` for a projected service account token. Leave the
 URL empty to run without embeddings.
+
+## Submissions
+
+Private feedback waiting for a staff decision.
+
+- **Submit:** users create submissions in the user context, with a verified
+  email, at most `--submission-limit` (5) per `--submission-window` (10m),
+  counted in Postgres across replicas. Names are always generated (`sub-…`)
+  because they are unique across users. Users can't change or withdraw a
+  submission.
+- **Read:** submitters read their own, without `triage`, the reviewer or the
+  staff-edited public text. Staff list and read all of them in the platform
+  context, with the owner in the `feedback.miloapis.com/owner` annotation.
+- **Status:** `feedback-controller` writes `status.triage` and
+  `feedback-sync` writes `status.postRef` (once). Nobody else writes status.
+- **Review:** staff `create` on `submissions/{name}/review` with a
+  `SubmissionReview`: `Approved` (public title and body), `Merged`
+  (`mergedInto`, a visible post) or `Rejected` (a reason the submitter
+  sees). Only from `PendingReview`, only in the platform context, and never
+  by feedback-sync or feedback-controller.
+- **Votes:** a merge gives the submitter a `Vote` and a `Subscription`
+  (`reason: merged`) in the same transaction. An approval does the same
+  (`reason: submitted`) when feedback-sync links the new post.
+
+**Attachments.** Clients create an `AttachmentUpload` in the user context
+(PNG, JPEG, GIF, WebP, PDF, plain text or JSON; `--attachment-max-size`,
+2 MiB; the declared type must match the content), then list its
+`uploadRef` in the submission. The server copies the file under the
+submission and takes its name and type from the upload, not the client.
+`GET submissions/{name}/attachment?ref=…` returns the file, as a download,
+to the submitter and staff. Files live in `--attachments-bucket`
+(`gs://…` in clusters, `file://` or `mem://` locally); give the bucket a
+lifecycle rule deleting `uploads/` after a day. Without a bucket,
+attachments are off and submissions without them still work.
 
 ## Development
 

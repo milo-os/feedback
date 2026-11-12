@@ -9,6 +9,7 @@ package identity
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
@@ -65,4 +66,25 @@ func (ids Identities) Of(ctx context.Context) Caller {
 	default:
 		return Other
 	}
+}
+
+// EmailVerifiedExtraKey is set by Milo's identity provider on every human
+// identity, "true" or "false". Machine identities don't carry it.
+const EmailVerifiedExtraKey = "iam.miloapis.com/emailVerified"
+
+// EmailUnverified reports whether the caller is a person whose email address
+// isn't verified. Machine identities carry no verdict and pass, as in Milo's
+// own admission check. Extras reach an aggregated API as request headers,
+// which lower-cases their keys, so the key is matched case-insensitively.
+func EmailUnverified(ctx context.Context) bool {
+	u, ok := request.UserFrom(ctx)
+	if !ok {
+		return false
+	}
+	for k, vals := range u.GetExtra() {
+		if strings.EqualFold(k, EmailVerifiedExtraKey) && !(len(vals) == 1 && vals[0] == "true") {
+			return true
+		}
+	}
+	return false
 }

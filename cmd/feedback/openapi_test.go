@@ -34,10 +34,14 @@ func TestOpenAPIGVKExtensions(t *testing.T) {
 	getName := definitionNamer()
 	defs := openapi.GetOpenAPIDefinitions(func(string) spec.Ref { return spec.Ref{} })
 
-	for _, obj := range feedbackv1alpha1.KnownTypes() {
+	for _, obj := range append(feedbackv1alpha1.KnownTypes(), feedbackv1alpha1.ParameterTypes()...) {
 		kind := reflect.TypeOf(obj).Elem().Name()
 		t.Run(kind, func(t *testing.T) {
 			key := typesPkg + "." + kind
+			if _, ok := defs[key]; !ok {
+				// Types with their own OpenAPIModelName are keyed by it.
+				key = openapiutil.ToRESTFriendlyName(key)
+			}
 			if _, ok := defs[key]; !ok {
 				t.Fatalf("%s has no OpenAPI definition; run task generate", key)
 			}

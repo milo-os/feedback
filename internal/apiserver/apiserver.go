@@ -15,14 +15,18 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/klog/v2"
 
+	"go.miloapis.com/feedback/internal/attachments"
 	"go.miloapis.com/feedback/internal/embedding"
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/milo"
 	"go.miloapis.com/feedback/internal/postgres"
+	"go.miloapis.com/feedback/internal/ratelimit"
+	"go.miloapis.com/feedback/internal/registry/attachmentupload"
 	"go.miloapis.com/feedback/internal/registry/feedbacksource"
 	"go.miloapis.com/feedback/internal/registry/post"
 	"go.miloapis.com/feedback/internal/registry/postquery"
 	"go.miloapis.com/feedback/internal/registry/release"
+	"go.miloapis.com/feedback/internal/registry/submission"
 	"go.miloapis.com/feedback/internal/registry/vote"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	"go.miloapis.com/feedback/pkg/apis/feedback/install"
@@ -34,6 +38,10 @@ var (
 	Scheme = runtime.NewScheme()
 	// Codecs serializes objects in Scheme.
 	Codecs = serializer.NewCodecFactory(Scheme)
+	// ParameterCodec decodes query parameters, including the group's own
+	// option types such as AttachmentOptions, which metav1.ParameterCodec
+	// doesn't know.
+	ParameterCodec = runtime.NewParameterCodec(Scheme)
 )
 
 func init() {
@@ -72,6 +80,20 @@ type ExtraConfig struct {
 	// disables both: PostQuery text uses Postgres keyword matching and
 	// votes record neither.
 	MiloKubeconfig string
+	// Submissions configures submissions and attachments.
+	Submissions SubmissionConfig
+}
+
+// SubmissionConfig configures submissions and their attachments.
+type SubmissionConfig struct {
+	// AttachmentsBucket is a gocloud blob URL (gs://..., file://..., mem://).
+	// Empty disables attachments.
+	AttachmentsBucket string
+	// AttachmentMaxSize is the largest file accepted, in bytes.
+	AttachmentMaxSize int
+	// Limit submissions per user to Limit per Window.
+	Limit  int
+	Window time.Duration
 }
 
 // QueryConfig configures PostQuery.
@@ -132,7 +154,7 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 
 	s := &FeedbackServer{GenericAPIServer: genericServer, pool: pool}
 
-	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(feedbackv1alpha1.GroupName, Scheme, metav1.ParameterCodec, Codecs)
+	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(feedbackv1alpha1.GroupName, Scheme, ParameterCodec, Codecs)
 	v1alpha1Storage := map[string]rest.Storage{}
 
 	// FeedbackSource is the one resource stored in etcd.
@@ -175,7 +197,7 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 	qc := c.ExtraConfig.Query
 	queryOpts := postquery.Options{
 		Dimensions:   qc.Embedding.Dimensions,
-		SimilarLimit: postquery.NewLimiter(qc.SimilarPerMinute, qc.SimilarBurst),
+		SimilarLimit: ratelimit.NewLimiter(qc.SimilarPerMinute, qc.SimilarBurst),
 	}
 	var users milo.Users
 	if path := c.ExtraConfig.MiloKubeconfig; path != "" {
@@ -221,8 +243,37 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 	}
 	v1alpha1Storage["votes"] = votes.Store
 
-	// Other Postgres-backed resources (Submission, SecurityReport, ...) are
-	// added here as they are implemented. See datum-cloud/enhancements#943.
+	sc := c.ExtraConfig.Submissions
+	var files *attachments.Store
+	if sc.AttachmentsBucket != "" {
+		files, err = attachments.Open(ctx, sc.AttachmentsBucket)
+		if err != nil {
+			pool.Close()
+			return nil, err
+		}
+		if sc.AttachmentMaxSize > 0 {
+			files.MaxSize = sc.AttachmentMaxSize
+		}
+	} else {
+		klog.Info("No --attachments-bucket: attachments are disabled")
+	}
+	// Uploads: 20 per 10 minutes per user, per replica.
+	v1alpha1Storage["attachmentuploads"] = attachmentupload.NewREST(files, ratelimit.NewLimiter(2, 20))
+	submissions, err := submission.NewREST(db, Scheme, submission.Options{
+		Identities: ids, Files: files, Votes: votes, Subscriptions: subs,
+		Limit: sc.Limit, Window: sc.Window,
+	})
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("create Submission storage: %w", err)
+	}
+	v1alpha1Storage["submissions"] = submissions.Store
+	v1alpha1Storage["submissions/status"] = submissions.Status
+	v1alpha1Storage["submissions/review"] = submissions.Review
+	v1alpha1Storage["submissions/attachment"] = submissions.Attachment
+
+	// Other Postgres-backed resources (SecurityReport, ...) are added here as
+	// they are implemented. See datum-cloud/enhancements#943.
 
 	apiGroupInfo.VersionedResourcesStorageMap[feedbackv1alpha1.SchemeGroupVersion.Version] = v1alpha1Storage
 	if err := genericServer.InstallAPIGroup(&apiGroupInfo); err != nil {

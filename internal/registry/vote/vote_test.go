@@ -224,7 +224,7 @@ func TestVoteRules(t *testing.T) {
 }
 
 func withEmail(uid, verified string) context.Context {
-	return withExtra(uid, EmailVerifiedExtraKey, verified)
+	return withExtra(uid, identity.EmailVerifiedExtraKey, verified)
 }
 
 func withExtra(uid, key, value string) context.Context {
