@@ -21,6 +21,7 @@ import (
 	"go.miloapis.com/feedback/internal/ratelimit"
 	"go.miloapis.com/feedback/internal/registry/attachmentupload"
 	"go.miloapis.com/feedback/internal/registry/post"
+	"go.miloapis.com/feedback/internal/registry/securityreport"
 	"go.miloapis.com/feedback/internal/registry/vote"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	"go.miloapis.com/feedback/internal/storage/pg/pgtest"
@@ -51,7 +52,7 @@ type env struct {
 
 func setup(t *testing.T) env {
 	t.Helper()
-	db := pgtest.Require(t, "posts", "votes", "subscriptions", "submissions")
+	db := pgtest.Require(t, "posts", "votes", "subscriptions", "submissions", "security_reports")
 	scheme := runtime.NewScheme()
 	install.Install(scheme)
 	posts, err := post.NewREST(db, scheme, ids)
@@ -447,5 +448,74 @@ func TestUploadRateLimit(t *testing.T) {
 	}
 	if _, err := e.upload(alice, "a.txt", "text/plain", []byte("a")); !apierrors.IsTooManyRequests(err) {
 		t.Errorf("second upload: %v", err)
+	}
+}
+
+func TestToSecurityReport(t *testing.T) {
+	e := setup(t)
+	reports, err := securityreport.NewREST(e.db, func() *runtime.Scheme { s := runtime.NewScheme(); install.Install(s); return s }(),
+		securityreport.Options{Identities: ids, Files: e.files})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.s.ToSecurity.reports = reports
+	if _, err := e.db.Pool.Exec(context.Background(), "TRUNCATE security_reports"); err != nil {
+		t.Fatal(err)
+	}
+
+	ref, err := e.upload(alice, "trace.txt", "text/plain", []byte("token=abc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := spec()
+	in.Attachments = []v1.AttachmentReference{{UploadRef: ref}}
+	s := e.submit(t, alice, in)
+
+	move := func(ctx context.Context, name string) (*v1.SecurityReport, error) {
+		obj, err := e.s.ToSecurity.Create(ctx, name, &v1.SubmissionToSecurityReport{Affected: "connectors"}, nil, &metav1.CreateOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return obj.(*v1.SecurityReport), nil
+	}
+	if _, err := move(alice, s.Name); !apierrors.IsForbidden(err) {
+		t.Errorf("submitter moves: %v", err)
+	}
+	if _, err := move(controller, s.Name); !apierrors.IsForbidden(err) {
+		t.Errorf("controller moves: %v", err)
+	}
+	r, err := move(staff, s.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Spec.Title != s.Spec.Title || r.Spec.Description != s.Spec.Body || r.Spec.Affected != "connectors" ||
+		r.Spec.Context.Client != v1.ClientPortal || r.Annotations[pg.OwnerAnnotation] != "alice" || len(r.Spec.Attachments) != 1 {
+		t.Errorf("report: %+v", r)
+	}
+	if _, err := e.s.Get(staff, s.Name, &metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Errorf("submission still there: %v", err)
+	}
+	if _, err := reports.Get(alice, r.Name, &metav1.GetOptions{}); err != nil {
+		t.Errorf("submitter can't read the report: %v", err)
+	}
+	h, err := reports.Attachment.Connect(alice, r.Name, &v1.AttachmentOptions{Ref: ref}, nil)
+	if err != nil {
+		t.Fatalf("attachment didn't move: %v", err)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	if w.Body.String() != "token=abc" {
+		t.Errorf("moved file: %q", w.Body.String())
+	}
+	if _, err := e.files.Get(context.Background(), v1.AttachmentPurposeSubmission, s.Name, ref); err != attachments.ErrNotFound {
+		t.Errorf("original file kept: %v", err)
+	}
+
+	reviewed := e.submit(t, alice, spec())
+	if _, err := e.review(staff, reviewed.Name, v1.SubmissionReviewSpec{Decision: v1.ReviewDecisionRejected, Reason: "no"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := move(staff, reviewed.Name); !apierrors.IsConflict(err) {
+		t.Errorf("reviewed submission moves: %v", err)
 	}
 }

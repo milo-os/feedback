@@ -32,6 +32,10 @@ type Kind struct {
 
 	// Scope resolves which owner a request reads and writes.
 	Scope ScopeFunc
+	// CreateScope, if set, resolves the owner of a new object instead of
+	// Scope. Security reports use it: staff read every report, but the ones
+	// they log for external reporters belong to the platform.
+	CreateScope ScopeFunc
 
 	// Columns returns the extra column values for obj. Every call must return
 	// the same column names in the same order.

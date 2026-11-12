@@ -4,10 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"mime"
-	"net/http"
-	"slices"
-	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,9 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
-	"k8s.io/klog/v2"
 
-	"go.miloapis.com/feedback/internal/attachments"
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/registry/vote"
 	"go.miloapis.com/feedback/internal/storage/pg"
@@ -130,63 +124,4 @@ func validateReview(s *v1.SubmissionReviewSpec) field.ErrorList {
 		errs = append(errs, field.Forbidden(p.Child("mergedInto"), "only for Merged"))
 	}
 	return errs
-}
-
-// AttachmentREST serves GET submissions/{name}/attachment?ref=: the file
-// itself, to the submitter and staff.
-type AttachmentREST struct {
-	store *pg.Store
-	files *attachments.Store
-}
-
-var _ rest.Connecter = &AttachmentREST{}
-
-func (r *AttachmentREST) New() runtime.Object { return &v1.Submission{} }
-func (r *AttachmentREST) Destroy()            {}
-
-func (r *AttachmentREST) NewConnectOptions() (runtime.Object, bool, string) {
-	return &v1.AttachmentOptions{}, false, ""
-}
-
-func (r *AttachmentREST) ConnectMethods() []string { return []string{http.MethodGet} }
-
-// Connect checks the caller can read the submission (the store scopes it to
-// the submitter in the user context) and that ref is attached to it.
-func (r *AttachmentREST) Connect(ctx context.Context, name string, opts runtime.Object, _ rest.Responder) (http.Handler, error) {
-	ref := opts.(*v1.AttachmentOptions).Ref
-	if ref == "" {
-		return nil, apierrors.NewBadRequest("set the ref query parameter to an attachment's uploadRef")
-	}
-	obj, err := r.store.Get(ctx, name, &metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	sub := obj.(*v1.Submission)
-	if !slices.ContainsFunc(sub.Spec.Attachments, func(a v1.AttachmentReference) bool { return a.UploadRef == ref }) {
-		return nil, apierrors.NewNotFound(v1.Resource("submissions/attachment"), ref)
-	}
-	if r.files == nil {
-		return nil, apierrors.NewServiceUnavailable("Attachments are not available.")
-	}
-	f, err := r.files.Get(ctx, v1.AttachmentPurposeSubmission, name, ref)
-	if errors.Is(err, attachments.ErrNotFound) {
-		return nil, apierrors.NewNotFound(v1.Resource("submissions/attachment"), ref)
-	}
-	if err != nil {
-		klog.ErrorS(err, "Reading attachment failed", "submission", name, "ref", ref)
-		return nil, apierrors.NewServiceUnavailable("Attachments are not available.")
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { serveFile(w, f) }), nil
-}
-
-// serveFile sends a file as a download that browsers won't render or run.
-func serveFile(w http.ResponseWriter, f *attachments.File) {
-	h := w.Header()
-	h.Set("Content-Type", f.ContentType)
-	h.Set("Content-Length", strconv.Itoa(len(f.Data)))
-	h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": f.Name}))
-	h.Set("X-Content-Type-Options", "nosniff")
-	h.Set("Content-Security-Policy", "sandbox; default-src 'none'")
-	h.Set("Cache-Control", "private, no-store")
-	_, _ = w.Write(f.Data)
 }

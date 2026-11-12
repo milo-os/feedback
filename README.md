@@ -18,7 +18,7 @@ entries. It runs as an aggregated API server under Milo, like
 
 Early. Every resource in the design has a v1alpha1 type in
 `pkg/apis/feedback/v1alpha1` and a sample in `config/samples`, and the server
-serves everything except `SecurityReport` and `SecurityAcknowledgement`. Storage for the rest is tracked as
+serves every resource in the design. Storage for the rest is tracked as
 sub-issues of the epic.
 
 | Resource | Storage | State |
@@ -28,7 +28,7 @@ sub-issues of the epic.
 | `PostQuery` | Postgres (not stored) | served |
 | `Vote`, `Subscription` | Postgres | served |
 | `Submission`, `AttachmentUpload` | Postgres, bucket | served |
-| `SecurityReport`, `SecurityAcknowledgement` | Postgres | planned |
+| `SecurityReport`, `SecurityAcknowledgement` | Postgres, bucket | served |
 
 ## Layout
 
@@ -168,6 +168,35 @@ to the submitter and staff. Files live in `--attachments-bucket`
 (`gs://…` in clusters, `file://` or `mem://` locally); give the bucket a
 lifecycle rule deleting `uploads/` after a day. Without a bucket,
 attachments are off and submissions without them still work.
+
+## Security reports
+
+Private vulnerability reports, with their own role: only the Security Team
+can list them or write their status. Feedback reviewers can't see them;
+Milo IAM enforces that (see #10).
+
+- **Report:** reporters create reports in the user context (verified email,
+  same rate limit as submissions) and read their own, without
+  `status.internal`. Names are generated (`sec-…`). Attachments are
+  `AttachmentUpload`s with `purpose: SecurityReport`, stored under their own
+  prefix and served by `securityreports/{name}/attachment?ref=` to the
+  reporter and the Security Team.
+- **Log:** the Security Team logs reports from email or GitHub in the
+  platform context with `spec.reporter` set. Those belong to the platform.
+- **Work:** the Security Team writes `status` through the status
+  subresource. A phase change gets a timeline entry if the team didn't add
+  one; timeline entries can be added but never changed. `NotApplicable` and
+  `Duplicate` need a reason, `Duplicate` needs `internal.duplicateOf`, and
+  `credits` rewards need an amount.
+- **Move:** staff send a misfiled submission to the security track with
+  `create` on `submissions/{name}/to-security-report`. In one transaction a
+  report owned by the submitter is created from it, its attachments are
+  copied, and the submission is deleted.
+- **Acknowledge:** `SecurityAcknowledgement` lists reports in `Fixed` or
+  `Disclosed` whose reporter chose public credit, with only the credited
+  name, link, month fixed and severity.
+
+Reports are never embedded, indexed, synced or sent to the AI gateway.
 
 ## Development
 
