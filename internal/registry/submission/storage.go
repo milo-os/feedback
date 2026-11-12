@@ -19,6 +19,8 @@ import (
 
 	"go.miloapis.com/feedback/internal/attachments"
 	"go.miloapis.com/feedback/internal/identity"
+	"go.miloapis.com/feedback/internal/registry/attachmentupload"
+	"go.miloapis.com/feedback/internal/registry/securityreport"
 	"go.miloapis.com/feedback/internal/registry/vote"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
@@ -33,6 +35,8 @@ type Options struct {
 	// their submission is approved or merged.
 	Votes         *vote.REST
 	Subscriptions *vote.SubscriptionREST
+	// Reports receives submissions moved to the security track.
+	Reports *securityreport.REST
 	// Limit submissions per user to Limit per Window. Zero disables it.
 	Limit  int
 	Window time.Duration
@@ -43,7 +47,8 @@ type REST struct {
 	*pg.Store
 	Status     *pg.StatusStore
 	Review     *ReviewREST
-	Attachment *AttachmentREST
+	ToSecurity *ToSecurityReportREST
+	Attachment *attachmentupload.DownloadREST
 }
 
 var gr = v1.Resource("submissions")
@@ -84,7 +89,20 @@ func NewREST(db *pg.DB, typer runtime.ObjectTyper, o Options) (*REST, error) {
 		Store:      store,
 		Status:     pg.NewStatusStore(store, statusStrategy{s}),
 		Review:     &ReviewREST{store: pg.NewStatusStore(store, reviewStrategy{s}), db: db, ids: o.Identities},
-		Attachment: &AttachmentREST{store: store, files: o.Files},
+		ToSecurity: &ToSecurityReportREST{store: store, reports: o.Reports, files: o.Files, db: db, ids: o.Identities},
+		Attachment: &attachmentupload.DownloadREST{
+			Get: func(ctx context.Context, name string) ([]v1.AttachmentReference, error) {
+				obj, err := store.Get(ctx, name, &metav1.GetOptions{})
+				if err != nil {
+					return nil, err
+				}
+				return obj.(*v1.Submission).Spec.Attachments, nil
+			},
+			NewFunc:  func() runtime.Object { return &v1.Submission{} },
+			Files:    o.Files,
+			Purpose:  v1.AttachmentPurposeSubmission,
+			Resource: v1.Resource("submissions/attachment"),
+		},
 	}, nil
 }
 

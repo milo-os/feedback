@@ -80,7 +80,15 @@ func (s *Store) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 }
 
 func (s *Store) scope(ctx context.Context) (Scope, error) {
-	sc, err := s.kind.Scope(ctx)
+	return s.resolve(ctx, s.kind.Scope)
+}
+
+func (s *Store) createScope(ctx context.Context) (Scope, error) {
+	return s.resolve(ctx, s.kind.CreateScope)
+}
+
+func (s *Store) resolve(ctx context.Context, fn ScopeFunc) (Scope, error) {
+	sc, err := fn(ctx)
 	if err == nil {
 		return sc, nil
 	}
@@ -310,7 +318,11 @@ func (s *Store) List(ctx context.Context, opts *metainternalversion.ListOptions)
 
 // Create implements rest.Creater.
 func (s *Store) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, opts *metav1.CreateOptions) (runtime.Object, error) {
-	sc, err := s.scope(ctx)
+	scopeFn := s.scope
+	if s.kind.CreateScope != nil {
+		scopeFn = s.createScope
+	}
+	sc, err := scopeFn(ctx)
 	if err != nil {
 		return nil, err
 	}

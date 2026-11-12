@@ -157,9 +157,10 @@ func (s *Store) Attach(ctx context.Context, purpose v1.AttachmentPurpose, owner,
 	return out, nil
 }
 
-// Move copies a parent's attachments to another parent and deletes the
-// originals, e.g. when a submission becomes a security report.
-func (s *Store) Move(ctx context.Context, from, to v1.AttachmentPurpose, fromParent, toParent string) error {
+// CopyParent copies a parent's attachments to another parent, e.g. when a
+// submission becomes a security report. Deleting the old parent deletes the
+// originals.
+func (s *Store) CopyParent(ctx context.Context, from, to v1.AttachmentPurpose, fromParent, toParent string) error {
 	src := ParentPrefix(from, fromParent)
 	it := s.bucket.List(&blob.ListOptions{Prefix: src})
 	for {
@@ -171,9 +172,6 @@ func (s *Store) Move(ctx context.Context, from, to v1.AttachmentPurpose, fromPar
 			return err
 		}
 		if err := s.bucket.Copy(ctx, ParentPrefix(to, toParent)+strings.TrimPrefix(obj.Key, src), obj.Key, nil); err != nil {
-			return err
-		}
-		if err := s.bucket.Delete(ctx, obj.Key); err != nil {
 			return err
 		}
 	}

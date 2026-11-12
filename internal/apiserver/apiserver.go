@@ -26,6 +26,7 @@ import (
 	"go.miloapis.com/feedback/internal/registry/post"
 	"go.miloapis.com/feedback/internal/registry/postquery"
 	"go.miloapis.com/feedback/internal/registry/release"
+	"go.miloapis.com/feedback/internal/registry/securityreport"
 	"go.miloapis.com/feedback/internal/registry/submission"
 	"go.miloapis.com/feedback/internal/registry/vote"
 	"go.miloapis.com/feedback/internal/storage/pg"
@@ -259,8 +260,20 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 	}
 	// Uploads: 20 per 10 minutes per user, per replica.
 	v1alpha1Storage["attachmentuploads"] = attachmentupload.NewREST(files, ratelimit.NewLimiter(2, 20))
+	reports, err := securityreport.NewREST(db, Scheme, securityreport.Options{
+		Identities: ids, Files: files, Limit: sc.Limit, Window: sc.Window,
+	})
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("create SecurityReport storage: %w", err)
+	}
+	v1alpha1Storage["securityreports"] = reports.Store
+	v1alpha1Storage["securityreports/status"] = reports.Status
+	v1alpha1Storage["securityreports/attachment"] = reports.Attachment
+	v1alpha1Storage["securityacknowledgements"] = securityreport.NewAcknowledgementREST(db)
+
 	submissions, err := submission.NewREST(db, Scheme, submission.Options{
-		Identities: ids, Files: files, Votes: votes, Subscriptions: subs,
+		Identities: ids, Files: files, Votes: votes, Subscriptions: subs, Reports: reports,
 		Limit: sc.Limit, Window: sc.Window,
 	})
 	if err != nil {
@@ -271,9 +284,7 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 	v1alpha1Storage["submissions/status"] = submissions.Status
 	v1alpha1Storage["submissions/review"] = submissions.Review
 	v1alpha1Storage["submissions/attachment"] = submissions.Attachment
-
-	// Other Postgres-backed resources (SecurityReport, ...) are added here as
-	// they are implemented. See datum-cloud/enhancements#943.
+	v1alpha1Storage["submissions/to-security-report"] = submissions.ToSecurity
 
 	apiGroupInfo.VersionedResourcesStorageMap[feedbackv1alpha1.SchemeGroupVersion.Version] = v1alpha1Storage
 	if err := genericServer.InstallAPIGroup(&apiGroupInfo); err != nil {
