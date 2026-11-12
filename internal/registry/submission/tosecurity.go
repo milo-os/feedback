@@ -12,6 +12,7 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 
 	"go.miloapis.com/feedback/internal/attachments"
+	"go.miloapis.com/feedback/internal/auditx"
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/registry/securityreport"
 	"go.miloapis.com/feedback/internal/storage/pg"
@@ -88,6 +89,7 @@ func (r *ToSecurityReportREST) Create(ctx context.Context, name string, obj runt
 			return err
 		}
 		rep := created.(*v1.SecurityReport)
+		auditx.Annotate(ctx, auditx.SecurityReport, rep.Name)
 		if len(sub.Spec.Attachments) > 0 {
 			if r.files == nil {
 				return apierrors.NewServiceUnavailable("Attachments are not available, so this submission can't move yet.")

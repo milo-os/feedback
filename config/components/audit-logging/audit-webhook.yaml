@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feedback-audit-webhook
+  namespace: feedback-system
+data:
+  audit-webhook.yaml: |
+    # The Vector webhook in activity-system that Milo sends to, so feedback
+    # events reach the audit log, activity and search the same way.
+    apiVersion: v1
+    kind: Config
+    clusters:
+      - name: activity-audit
+        cluster:
+          server: https://vector-sidecar.activity-system.svc.cluster.local:8080/events
+          certificate-authority: /etc/kubernetes/pki/audit-webhook/ca.crt
+    users:
+      - name: feedback-apiserver
+        user:
+          token: noop
+    contexts:
+      - name: activity-audit
+        context:
+          cluster: activity-audit
+          user: feedback-apiserver
+    current-context: activity-audit

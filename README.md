@@ -82,6 +82,28 @@ only in their owner's context, submissions and security reports are created
 only by their author (or logged by the Security Team), and
 `FeedbackSource` is platform-only.
 
+## Audit
+
+Milo proxies requests to this API without their bodies, so the apiserver is
+the audit source for its own writes (`config/components/audit-logging`,
+included in the core-control-plane overlay):
+
+- Writes to posts, releases, changelog entries, votes, subscriptions and
+  feedback sources are logged at `RequestResponse`. The search indexer reads
+  posts, releases and changelog entries from `responseObject`.
+- Submissions, security reports, uploads and `PostQuery` are logged at
+  `Metadata`, so private context, vulnerability details, files and draft
+  feedback never reach the audit log, activity or search.
+- Reads aren't logged here; Milo's events cover them.
+- Side effects are annotations on the request that caused them:
+  `feedback.miloapis.com/subscribed`, `votes-moved-to`, `vote-granted` and
+  `security-report`.
+
+Events go to activity's Vector webhook in `activity-system`, like Milo's.
+The deployment supplies the webhook's CA as the `feedback-audit-webhook-ca`
+ConfigMap, and drops Milo's own events for `feedback.miloapis.com` writes so
+each write is recorded once.
+
 ## Postgres
 
 The apiserver is the only component that connects to Postgres. Other

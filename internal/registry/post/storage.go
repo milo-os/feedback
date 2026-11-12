@@ -15,6 +15,7 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/klog/v2"
 
+	"go.miloapis.com/feedback/internal/auditx"
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
@@ -176,6 +177,7 @@ func (h hooks) beforeWrite(ctx context.Context, op pg.Op, old, obj runtime.Objec
 		if err := moveVotes(ctx, q, p.Name, to); err != nil {
 			return apierrors.NewInternalError(fmt.Errorf("move votes to %s: %w", to, err))
 		}
+		auditx.Annotate(ctx, auditx.VotesMovedTo, to)
 		if _, err := Retally(ctx, h.db, to, now); err != nil {
 			return apierrors.NewInternalError(fmt.Errorf("retally %s: %w", to, err))
 		}

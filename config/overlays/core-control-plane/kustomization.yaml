@@ -4,6 +4,9 @@ kind: Kustomization
 resources:
   - ../../base
 
+components:
+  - ../../components/audit-logging
+
 images:
   - name: ghcr.io/milo-os/feedback
     newTag: latest

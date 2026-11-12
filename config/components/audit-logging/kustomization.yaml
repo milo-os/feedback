@@ -1,0 +1,48 @@
+# Audit logging for the feedback apiserver: a policy and a webhook to
+# activity's Vector. The deployer supplies the webhook's CA as the ConfigMap
+# feedback-audit-webhook-ca (key ca.crt), e.g. from the cluster's trust
+# bundle, or replaces feedback-audit-webhook.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - audit-policy.yaml
+  - audit-webhook.yaml
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: feedback-apiserver
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --audit-policy-file=/etc/feedback/audit/policy/audit-policy.yaml
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --audit-webhook-config-file=/etc/feedback/audit/webhook/audit-webhook.yaml
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --audit-webhook-mode=batch
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --audit-webhook-initial-backoff=10s
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value: {name: audit-policy, mountPath: /etc/feedback/audit/policy, readOnly: true}
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value: {name: audit-webhook, mountPath: /etc/feedback/audit/webhook, readOnly: true}
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value: {name: audit-webhook-ca, mountPath: /etc/kubernetes/pki/audit-webhook, readOnly: true}
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value: {name: audit-policy, configMap: {name: feedback-audit-policy}}
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value: {name: audit-webhook, configMap: {name: feedback-audit-webhook}}
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value: {name: audit-webhook-ca, configMap: {name: feedback-audit-webhook-ca, optional: true}}

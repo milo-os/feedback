@@ -18,6 +18,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"go.miloapis.com/feedback/internal/attachments"
+	"go.miloapis.com/feedback/internal/auditx"
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/registry/attachmentupload"
 	"go.miloapis.com/feedback/internal/registry/securityreport"
@@ -216,7 +217,10 @@ func (h hooks) grant(ctx context.Context, owner string, sub *v1.Submission, post
 	}
 	_, err := h.o.Votes.Create(as, v, nil, &metav1.CreateOptions{})
 	switch {
-	case err == nil, apierrors.IsAlreadyExists(err):
+	case err == nil:
+		auditx.Annotate(ctx, auditx.VoteGranted, owner+"/"+post)
+		return nil
+	case apierrors.IsAlreadyExists(err):
 		return nil
 	case apierrors.IsInvalid(err):
 		klog.InfoS("Not giving the submitter a vote", "submission", sub.Name, "post", post, "err", err)
