@@ -18,7 +18,7 @@ entries. It runs as an aggregated API server under Milo, like
 
 Early. Every resource in the design has a v1alpha1 type in
 `pkg/apis/feedback/v1alpha1` and a sample in `config/samples`, and the server
-serves `FeedbackSource`, `Post`, `PostQuery`, `Release` and `ChangelogEntry`. Storage for the rest is tracked as
+serves `FeedbackSource`, `Post`, `PostQuery`, `Release`, `ChangelogEntry`, `Vote` and `Subscription`. Storage for the rest is tracked as
 sub-issues of the epic.
 
 | Resource | Storage | State |
@@ -26,7 +26,7 @@ sub-issues of the epic.
 | `FeedbackSource` | etcd | served |
 | `Post`, `Release`, `ChangelogEntry` | Postgres | served |
 | `PostQuery` | Postgres (not stored) | served |
-| `Vote`, `Subscription` | Postgres | planned |
+| `Vote`, `Subscription` | Postgres | served |
 | `Submission`, `SecurityReport`, `SecurityAcknowledgement` | Postgres | planned |
 
 ## Layout
@@ -81,6 +81,31 @@ service accounts). On top of Milo's IAM:
 - Votes on a deleted post are kept for `--vote-retention` (30 days) in case
   the post comes back.
 
+## Votes
+
+`Vote` and `Subscription` belong to a user. Users create, read and delete
+their own in the user context; staff list everyone's in the platform
+context, where the `feedback.miloapis.com/owner` annotation names the owner.
+Both are named after the post, so there is one of each per user per post.
+
+- Voting needs a verified email (the `iam.miloapis.com/emailVerified` claim
+  Milo puts on human identities) and a visible post that hasn't been merged.
+- A vote also subscribes the voter (`reason: voted`), and recomputes the
+  post's `votes` in the same transaction. Unvoting keeps the subscription.
+  Users following a post themselves get `reason: manual`.
+- The vote records the voter's organizations and linked GitHub username,
+  looked up from Milo (`--milo-kubeconfig`). They are for staff analytics and
+  dedupe, never public. If Milo can't answer, the vote is recorded without
+  them.
+- `votes.total` is Datum votes plus GitHub 👍, minus `votes.linked`: voters
+  whose linked GitHub username is among the 👍 reactions `feedback-sync`
+  reports in `votes.githubReactions`.
+- `votes.trendingScore` is `Σ 0.5^(age_days / 7)` over votes and 👍
+  reactions with a known time, counting linked people once. It is
+  recomputed on every vote and post write, and hourly as votes age.
+- When `feedback-sync` sets `status.mergedInto` on a post, its votes and
+  subscriptions move to the target. A user with both keeps one.
+
 ## PostQuery
 
 `PostQuery` is create-to-query: send one, read `status.results`, `facets`
@@ -90,9 +115,9 @@ and `continue`. Nothing is stored. Hidden posts never appear.
   `top`, `newest`, `trending` or `recentlyChanged`. `votedByMe` and
   `followedByMe` work in the user context only.
 - **`text`** goes to Milo's search service as a `ResourceSearchQuery` over the
-  posts index (`--search-kubeconfig`), then filters apply in Postgres and
+  posts index (`--milo-kubeconfig`), then filters apply in Postgres and
   `relevance` keeps search's order. If search is down, `text` returns 503.
-  Without `--search-kubeconfig` it uses Postgres keyword matching instead,
+  Without `--milo-kubeconfig` it uses Postgres keyword matching instead,
   which is what local development gets.
 - **`similarTo`** embeds the draft text through the AI gateway and ranks the
   100 nearest posts by cosine similarity. If the gateway is unreachable, or

@@ -17,11 +17,13 @@ import (
 
 	"go.miloapis.com/feedback/internal/embedding"
 	"go.miloapis.com/feedback/internal/identity"
+	"go.miloapis.com/feedback/internal/milo"
 	"go.miloapis.com/feedback/internal/postgres"
 	"go.miloapis.com/feedback/internal/registry/feedbacksource"
 	"go.miloapis.com/feedback/internal/registry/post"
 	"go.miloapis.com/feedback/internal/registry/postquery"
 	"go.miloapis.com/feedback/internal/registry/release"
+	"go.miloapis.com/feedback/internal/registry/vote"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	"go.miloapis.com/feedback/pkg/apis/feedback/install"
 	feedbackv1alpha1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
@@ -65,13 +67,15 @@ type ExtraConfig struct {
 	VoteRetention time.Duration
 	// Query configures PostQuery's search, embeddings and rate limit.
 	Query QueryConfig
+	// MiloKubeconfig reaches the Milo API, for the search service and user
+	// lookups (voters' organizations and linked GitHub usernames). Empty
+	// disables both: PostQuery text uses Postgres keyword matching and
+	// votes record neither.
+	MiloKubeconfig string
 }
 
 // QueryConfig configures PostQuery.
 type QueryConfig struct {
-	// SearchKubeconfig reaches the Milo API whose search service answers
-	// spec.text. Empty uses Postgres keyword matching.
-	SearchKubeconfig string
 	// Embedding reaches the AI gateway for similarTo. Disabled when its URL
 	// is empty; similarTo then uses keyword matching.
 	Embedding embedding.Config
@@ -173,15 +177,27 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 		Dimensions:   qc.Embedding.Dimensions,
 		SimilarLimit: postquery.NewLimiter(qc.SimilarPerMinute, qc.SimilarBurst),
 	}
-	if qc.SearchKubeconfig != "" {
-		search, err := postquery.NewSearchService(qc.SearchKubeconfig)
+	var users milo.Users
+	if path := c.ExtraConfig.MiloKubeconfig; path != "" {
+		cfg, err := milo.Config(path)
+		if err != nil {
+			pool.Close()
+			return nil, err
+		}
+		search, err := postquery.NewSearchServiceForConfig(cfg)
 		if err != nil {
 			pool.Close()
 			return nil, err
 		}
 		queryOpts.Search = search
+		mc, err := milo.NewClient(cfg)
+		if err != nil {
+			pool.Close()
+			return nil, err
+		}
+		users = mc
 	} else {
-		klog.Info("No --search-kubeconfig: PostQuery text uses Postgres keyword matching")
+		klog.Info("No --milo-kubeconfig: PostQuery text uses Postgres keyword matching, and votes don't record organizations or GitHub usernames")
 	}
 	var embedder *embedding.Client
 	if qc.Embedding.Enabled() {
@@ -192,8 +208,21 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 	}
 	v1alpha1Storage["postqueries"] = postquery.NewREST(db, queryOpts)
 
-	// Other Postgres-backed resources (Vote, Submission, ...) are added here
-	// as they are implemented. See datum-cloud/enhancements#943.
+	subs, err := vote.NewSubscriptionREST(db, Scheme)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("create Subscription storage: %w", err)
+	}
+	v1alpha1Storage["subscriptions"] = subs.Store
+	votes, err := vote.NewREST(db, Scheme, users, subs)
+	if err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("create Vote storage: %w", err)
+	}
+	v1alpha1Storage["votes"] = votes.Store
+
+	// Other Postgres-backed resources (Submission, SecurityReport, ...) are
+	// added here as they are implemented. See datum-cloud/enhancements#943.
 
 	apiGroupInfo.VersionedResourcesStorageMap[feedbackv1alpha1.SchemeGroupVersion.Version] = v1alpha1Storage
 	if err := genericServer.InstallAPIGroup(&apiGroupInfo); err != nil {
@@ -207,6 +236,10 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 		return nil
 	})
 
+	genericServer.AddPostStartHookOrDie("feedback-trending", func(hc genericapiserver.PostStartHookContext) error {
+		go post.RunTrending(hc.Context, db, time.Hour)
+		return nil
+	})
 	if embedder != nil {
 		interval := qc.EmbedInterval
 		genericServer.AddPostStartHookOrDie("feedback-embed-posts", func(hc genericapiserver.PostStartHookContext) error {

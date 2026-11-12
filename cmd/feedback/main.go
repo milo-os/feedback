@@ -126,6 +126,7 @@ type serverOptions struct {
 	Identities         identity.Identities
 	VoteRetention      time.Duration
 	Query              feedbackapiserver.QueryConfig
+	MiloKubeconfig     string
 }
 
 func newServerOptions() *serverOptions {
@@ -165,9 +166,10 @@ func (o *serverOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.VoteRetention, "vote-retention", o.VoteRetention,
 		"How long votes on a deleted post are kept in case it returns. 0 disables the purge.")
 	q := &o.Query
-	fs.StringVar(&q.SearchKubeconfig, "search-kubeconfig", q.SearchKubeconfig,
-		"Kubeconfig for the Milo API whose search service answers PostQuery text. "+
-			"Empty uses Postgres keyword matching instead.")
+	fs.StringVar(&o.MiloKubeconfig, "milo-kubeconfig", o.MiloKubeconfig,
+		"Kubeconfig for the Milo API, used for the search service (PostQuery text) and for "+
+			"voters' organizations and linked GitHub usernames. Empty uses Postgres keyword "+
+			"matching and records neither.")
 	fs.StringVar(&q.Embedding.URL, "ai-gateway-url", q.Embedding.URL,
 		"Base URL of the OpenAI-compatible AI gateway, including /v1. "+
 			"Empty disables embeddings: similarTo uses keyword matching.")
@@ -257,10 +259,11 @@ func (o *serverOptions) Config() (*feedbackapiserver.Config, error) {
 	return &feedbackapiserver.Config{
 		GenericConfig: genericConfig,
 		ExtraConfig: feedbackapiserver.ExtraConfig{
-			Postgres:      o.Postgres,
-			Identities:    o.Identities,
-			VoteRetention: o.VoteRetention,
-			Query:         o.Query,
+			Postgres:       o.Postgres,
+			Identities:     o.Identities,
+			VoteRetention:  o.VoteRetention,
+			Query:          o.Query,
+			MiloKubeconfig: o.MiloKubeconfig,
 		},
 	}, nil
 }
