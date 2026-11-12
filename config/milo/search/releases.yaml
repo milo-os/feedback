@@ -1,0 +1,20 @@
+apiVersion: search.miloapis.com/v1alpha1
+kind: ResourceIndexPolicy
+metadata:
+  name: feedback-releases
+spec:
+  targetResource:
+    group: feedback.miloapis.com
+    version: v1alpha1
+    kind: Release
+  fields:
+    - path: .metadata.name
+    - path: .status.title
+      searchable: true
+    - path: .status.codename
+      searchable: true
+    - path: .status.version
+      searchable: true
+    - path: .status.descriptionHTML
+      searchable: true
+    - path: .status.dueOn

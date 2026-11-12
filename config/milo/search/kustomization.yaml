@@ -1,0 +1,10 @@
+# Search index policies for Milo's search service. PostQuery's text search
+# needs the posts index; feedback is also findable through platform search.
+# Security reports, submissions, votes and subscriptions are never indexed.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - posts.yaml
+  - releases.yaml
+  - changelogentries.yaml
