@@ -82,6 +82,23 @@ only in their owner's context, submissions and security reports are created
 only by their author (or logged by the Security Team), and
 `FeedbackSource` is platform-only.
 
+## Search
+
+`config/milo/search` registers a `ResourceIndexPolicy` each for `Post`,
+`Release` and `ChangelogEntry` with Milo's search service, which indexes them
+from the audit events this apiserver writes. That is what PostQuery's `text`
+uses (with `--milo-kubeconfig`), and it makes feedback findable through
+platform search.
+
+- Searchable: titles, summaries and body text, categories, labels and post
+  state. `votes`, `trendingScore`, `delivery` and the derived post lists
+  aren't searchable: they change as side effects and would go stale.
+- Hidden posts aren't indexed; hiding a post removes it from the index.
+- Submissions, security reports, votes and subscriptions are never indexed.
+
+`hack/search-lag.sh <post>` measures how long a change takes to reach the
+index, by hiding and unhiding a post. Run it against staging.
+
 ## Audit
 
 Milo proxies requests to this API without their bodies, so the apiserver is
