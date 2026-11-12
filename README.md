@@ -18,14 +18,14 @@ entries. It runs as an aggregated API server under Milo, like
 
 Early. Every resource in the design has a v1alpha1 type in
 `pkg/apis/feedback/v1alpha1` and a sample in `config/samples`, and the server
-serves `FeedbackSource`, `Post`, `Release` and `ChangelogEntry`. Storage for the rest is tracked as
+serves `FeedbackSource`, `Post`, `PostQuery`, `Release` and `ChangelogEntry`. Storage for the rest is tracked as
 sub-issues of the epic.
 
 | Resource | Storage | State |
 | --- | --- | --- |
 | `FeedbackSource` | etcd | served |
 | `Post`, `Release`, `ChangelogEntry` | Postgres | served |
-| `PostQuery` | Postgres | planned |
+| `PostQuery` | Postgres (not stored) | served |
 | `Vote`, `Subscription` | Postgres | planned |
 | `Submission`, `SecurityReport`, `SecurityAcknowledgement` | Postgres | planned |
 
@@ -80,6 +80,34 @@ service accounts). On top of Milo's IAM:
   the posts table on every read.
 - Votes on a deleted post are kept for `--vote-retention` (30 days) in case
   the post comes back.
+
+## PostQuery
+
+`PostQuery` is create-to-query: send one, read `status.results`, `facets`
+and `continue`. Nothing is stored. Hidden posts never appear.
+
+- **Browse:** filter by state, categories, orgs and delivery stage; sort by
+  `top`, `newest`, `trending` or `recentlyChanged`. `votedByMe` and
+  `followedByMe` work in the user context only.
+- **`text`** goes to Milo's search service as a `ResourceSearchQuery` over the
+  posts index (`--search-kubeconfig`), then filters apply in Postgres and
+  `relevance` keeps search's order. If search is down, `text` returns 503.
+  Without `--search-kubeconfig` it uses Postgres keyword matching instead,
+  which is what local development gets.
+- **`similarTo`** embeds the draft text through the AI gateway and ranks the
+  100 nearest posts by cosine similarity. If the gateway is unreachable, or
+  no posts have embeddings yet, it falls back to keyword matching and says so
+  in a `Warning` header. It is rate limited per user (`--similar-to-rate`,
+  `--similar-to-burst`), per replica, with 429 and `Retry-After`.
+- **Embeddings** are made by the apiserver itself every `--embed-interval`
+  for new and changed posts (title, summary and body as text), stored in
+  `post_embeddings` with their model. Changing `--embedding-model`
+  re-embeds everything. One replica does this at a time.
+
+The gateway is any OpenAI-compatible `/embeddings` endpoint:
+`--ai-gateway-url` (including `/v1`), `--embedding-model`, and
+`--ai-gateway-token-file` for a projected service account token. Leave the
+URL empty to run without embeddings.
 
 ## Development
 
