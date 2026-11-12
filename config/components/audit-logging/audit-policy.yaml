@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feedback-audit-policy
+  namespace: feedback-system
+data:
+  audit-policy.yaml: |
+    # The feedback apiserver is the audit source for writes to its API. Milo
+    # proxies requests here without their bodies, so it records them at
+    # Metadata only; the deployment drops Milo's events for
+    # feedback.miloapis.com writes so each write is recorded once, here.
+    # Reads stay with Milo's events.
+    apiVersion: audit.k8s.io/v1
+    kind: Policy
+    omitStages:
+      - RequestReceived
+      - ResponseStarted
+      - Panic
+    rules:
+      - level: None
+        nonResourceURLs:
+          - /healthz*
+          - /livez*
+          - /readyz*
+          - /metrics
+          - /version
+          - /api
+          - /apis
+          - /apis/*
+          - /openapi
+          - /openapi/*
+      - level: None
+        verbs: [get, list, watch]
+      # Private content stays out of the audit log, activity and search:
+      # submissions (private context, triage), security reports
+      # (vulnerability details), uploads (file contents) and PostQuery
+      # (draft feedback in similarTo). Side effects show as annotations.
+      - level: Metadata
+        resources:
+          - group: feedback.miloapis.com
+            resources:
+              - submissions
+              - submissions/*
+              - securityreports
+              - securityreports/*
+              - attachmentuploads
+              - postqueries
+      # Everything else is written with its bodies. The search indexer reads
+      # posts, releases and changelog entries from responseObject.
+      - level: RequestResponse
+        verbs: [create, update, patch, delete, deletecollection]
+        resources:
+          - group: feedback.miloapis.com
+      - level: None

@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apiserver/pkg/storage/names"
 
+	"go.miloapis.com/feedback/internal/auditx"
 	"go.miloapis.com/feedback/internal/storage/pg"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
@@ -117,6 +118,9 @@ func (r *SubscriptionREST) Follow(ctx context.Context, postName string, reason v
 	_, err := r.Create(context.WithValue(ctx, reasonKey{}, reason), sub, nil, &metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
 		return nil
+	}
+	if err == nil {
+		auditx.Annotate(ctx, auditx.Subscribed, postName)
 	}
 	return err
 }
