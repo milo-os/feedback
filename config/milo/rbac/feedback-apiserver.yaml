@@ -1,0 +1,62 @@
+# The apiserver calls Milo itself (--milo-kubeconfig): keyword search over
+# posts, and the voter's organizations and linked GitHub username. Listing
+# across users needs cluster-wide list; the field selectors it sends narrow
+# the result, not the permission.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: feedback.miloapis.com:apiserver
+rules:
+  - apiGroups: [search.miloapis.com]
+    resources: [resourcesearchqueries]
+    verbs: [create]
+  - apiGroups: [resourcemanager.miloapis.com]
+    resources: [organizationmemberships]
+    verbs: [list]
+  - apiGroups: [identity.miloapis.com]
+    resources: [useridentities]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: feedback.miloapis.com:apiserver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: feedback.miloapis.com:apiserver
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:feedback-apiserver@feedback.miloapis.com
+---
+# Delegated authentication and authorization against Milo, when the
+# apiserver's --authentication-kubeconfig and --authorization-kubeconfig use
+# this identity. Authorization is also how it decides who sees hidden posts
+# (a SubjectAccessReview for get on posts/hidden).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: feedback.miloapis.com:apiserver:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:feedback-apiserver@feedback.miloapis.com
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: feedback.miloapis.com:apiserver:authentication-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:feedback-apiserver@feedback.miloapis.com

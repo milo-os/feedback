@@ -1,0 +1,26 @@
+# Who gets which role, platform-wide. Optional: a deployment includes this
+# component, or binds the roles to its own groups instead.
+#
+# - feedback-security-team gets the security-team role on reports.
+# - staff-users get the reviewer role on everything else. PolicyBindings
+#   select one kind each, so there is one file per kind.
+#
+# Users get feedback.miloapis.com-user on their own User by adding it to
+# inheritedRoles of Milo's iam-user-self-manage role. That role is shared
+# with other services, so the deployment patches it, keeping their entries.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - security-team-group.yaml
+  - security-team-securityreports.yaml
+  - security-team-securityacknowledgements.yaml
+  - staff-reviewer-feedbacksources.yaml
+  - staff-reviewer-posts.yaml
+  - staff-reviewer-postqueries.yaml
+  - staff-reviewer-releases.yaml
+  - staff-reviewer-changelogentries.yaml
+  - staff-reviewer-votes.yaml
+  - staff-reviewer-subscriptions.yaml
+  - staff-reviewer-submissions.yaml
+  - staff-reviewer-securityacknowledgements.yaml

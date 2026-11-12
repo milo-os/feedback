@@ -164,14 +164,14 @@ func (c completedConfig) New(ctx context.Context) (*FeedbackServer, error) {
 		pool.Close()
 		return nil, fmt.Errorf("create FeedbackSource storage: %w", err)
 	}
-	v1alpha1Storage["feedbacksources"] = sourceStorage.Store
+	v1alpha1Storage["feedbacksources"] = sourceStorage
 	v1alpha1Storage["feedbacksources/status"] = sourceStorage.Status
 
 	// Everything else is in Postgres.
 	db := &pg.DB{Pool: pool}
 	ids := c.ExtraConfig.Identities
 
-	posts, err := post.NewREST(db, Scheme, ids)
+	posts, err := post.NewREST(db, Scheme, ids, post.WithHiddenAuthorizer(c.GenericConfig.Authorization.Authorizer))
 	if err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("create Post storage: %w", err)

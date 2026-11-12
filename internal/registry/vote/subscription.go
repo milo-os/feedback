@@ -93,7 +93,7 @@ func NewSubscriptionREST(db *pg.DB, typer runtime.ObjectTyper) (*SubscriptionRES
 		FieldColumns: map[string]string{"spec.postRef.name": "post_name", "spec.reason": "reason"},
 		BeforeWrite: func(ctx context.Context, op pg.Op, _, obj runtime.Object) error {
 			if op != pg.OpCreate {
-				return nil
+				return userOnly(ctx)
 			}
 			sub := obj.(*v1.Subscription)
 			return CheckPost(ctx, db, v1.Kind("Subscription"), sub.Name, sub.Spec.PostRef.Name)

@@ -1,0 +1,7 @@
+# Members are added with GroupMemberships. Keep it to the people who handle
+# vulnerability reports: membership grants every report's contents.
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Group
+metadata:
+  name: feedback-security-team
+  namespace: milo-system

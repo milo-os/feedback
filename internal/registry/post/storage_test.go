@@ -3,6 +3,7 @@ package post
 import (
 	"context"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/apiserver/pkg/registry/rest"
 
 	"go.miloapis.com/feedback/internal/storage/pg"
@@ -312,5 +314,50 @@ func TestVoteRetention(t *testing.T) {
 	db.Pool.QueryRow(ctx, "SELECT count(*) FROM deleted_posts").Scan(&tracked)
 	if tracked != 0 {
 		t.Fatalf("deleted_posts still has %d rows", tracked)
+	}
+}
+
+// allowHidden lets only the named users get posts/hidden.
+func allowHidden(users ...string) authorizer.Authorizer {
+	return authorizer.AuthorizerFunc(func(_ context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
+		if a.GetResource() == "posts" && a.GetSubresource() == "hidden" && a.GetVerb() == "get" && slices.Contains(users, a.GetUser().GetName()) {
+			return authorizer.DecisionAllow, "", nil
+		}
+		return authorizer.DecisionNoOpinion, "", nil
+	})
+}
+
+func TestHiddenNeedsPermission(t *testing.T) {
+	db := pgtest.Require(t, "posts", "votes", "post_embeddings", "deleted_posts")
+	scheme := runtime.NewScheme()
+	install.Install(scheme)
+	r, err := NewREST(db, scheme, ids, WithHiddenAuthorizer(allowHidden("staff@datum.net", "sync")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	website := pgtest.AsPlatform("datum-net")
+	obj, err := r.Create(syncCtx, newPost(1, v1.PostStateBacklog), nil, &metav1.CreateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := obj.(*v1.Post)
+	p.Spec.Hidden = true
+	if _, err := update(r, staffCtx, p); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := r.Get(website, p.Name, &metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Errorf("website gets a hidden post: %v", err)
+	}
+	list, err := r.List(website, &metainternalversion.ListOptions{})
+	if err != nil || len(list.(*v1.PostList).Items) != 0 {
+		t.Errorf("website lists a hidden post: %v %v", list, err)
+	}
+	get(t, r, staffCtx, p.Name)
+	// Sync keeps updating hidden posts.
+	q := get(t, r, syncCtx, p.Name)
+	q.Status.Title = "synced"
+	if _, err := update(r.Status, syncCtx, q); err != nil {
+		t.Errorf("sync updates a hidden post: %v", err)
 	}
 }

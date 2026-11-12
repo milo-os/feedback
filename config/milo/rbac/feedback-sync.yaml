@@ -1,0 +1,43 @@
+# feedback-sync mirrors GitHub into posts, releases and changelog entries,
+# reads its FeedbackSources, and links approved submissions to their posts.
+# It authenticates to Milo with a client certificate whose common name is
+# the subject below; the apiserver recognises the same name (--sync-users).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: feedback.miloapis.com:sync
+rules:
+  - apiGroups: [feedback.miloapis.com]
+    resources: [feedbacksources]
+    verbs: [get, list, watch]
+  - apiGroups: [feedback.miloapis.com]
+    resources: [feedbacksources/status]
+    verbs: [get, update, patch]
+  - apiGroups: [feedback.miloapis.com]
+    resources: [posts, releases, changelogentries]
+    verbs: [get, list, create, update, patch, delete]
+  - apiGroups: [feedback.miloapis.com]
+    resources: [posts/status, releases/status, changelogentries/status]
+    verbs: [get, update, patch]
+  - apiGroups: [feedback.miloapis.com]
+    resources: [posts/hidden]
+    verbs: [get]
+  - apiGroups: [feedback.miloapis.com]
+    resources: [submissions]
+    verbs: [get, list]
+  - apiGroups: [feedback.miloapis.com]
+    resources: [submissions/status]
+    verbs: [get, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: feedback.miloapis.com:sync
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: feedback.miloapis.com:sync
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:feedback-sync@feedback.miloapis.com

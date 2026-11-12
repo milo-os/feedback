@@ -10,7 +10,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/duration"
+	"k8s.io/apiserver/pkg/authorization/authorizer"
+	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
+	"k8s.io/klog/v2"
 
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/storage/pg"
@@ -23,8 +26,27 @@ type REST struct {
 	Status *pg.StatusStore
 }
 
+// Option configures post storage.
+type Option func(*options)
+
+type options struct {
+	authz authorizer.Authorizer
+}
+
+// WithHiddenAuthorizer decides who sees hidden posts: callers allowed get on
+// the posts/hidden virtual subresource (staff, feedback-sync,
+// feedback-controller). Without it, every platform-context caller sees them,
+// which is only right for tests and local development.
+func WithHiddenAuthorizer(a authorizer.Authorizer) Option {
+	return func(o *options) { o.authz = a }
+}
+
 // NewREST returns Postgres-backed storage for Post.
-func NewREST(db *pg.DB, typer runtime.ObjectTyper, ids identity.Identities) (*REST, error) {
+func NewREST(db *pg.DB, typer runtime.ObjectTyper, ids identity.Identities, opts ...Option) (*REST, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	s := newStrategy(typer, ids)
 	h := hooks{db: db, ids: ids}
 	store, err := pg.NewStore(db, pg.Kind{
@@ -46,7 +68,7 @@ func NewREST(db *pg.DB, typer runtime.ObjectTyper, ids identity.Identities) (*RE
 			"status.release":           "release",
 		},
 		TableConvertor: tableConvertor{},
-		ReadFilter:     readFilter,
+		ReadFilter:     o.readFilter,
 		BeforeWrite:    h.beforeWrite,
 		AfterWrite:     h.afterWrite,
 	})
@@ -56,14 +78,36 @@ func NewREST(db *pg.DB, typer runtime.ObjectTyper, ids identity.Identities) (*RE
 	return &REST{Store: store, Status: pg.NewStatusStore(store, statusStrategy{s})}, nil
 }
 
-// readFilter hides hidden posts outside the platform context. Platform
-// callers (staff, the website's service account, the service's own
-// components) see them and filter with spec.hidden=false where needed.
-func readFilter(ctx context.Context) string {
-	if kind, _ := pg.RequestContext(ctx); kind != pg.ScopePlatform {
+// readFilter hides hidden posts from callers who may not see them. Being in
+// the platform context isn't enough: the website's service account reads
+// posts there too.
+func (o options) readFilter(ctx context.Context) string {
+	if o.authz == nil {
+		if kind, _ := pg.RequestContext(ctx); kind == pg.ScopePlatform {
+			return ""
+		}
 		return "NOT hidden"
 	}
-	return ""
+	if CanSeeHidden(ctx, o.authz) {
+		return ""
+	}
+	return "NOT hidden"
+}
+
+// CanSeeHidden reports whether the caller may get posts/hidden.
+func CanSeeHidden(ctx context.Context, a authorizer.Authorizer) bool {
+	u, ok := request.UserFrom(ctx)
+	if !ok {
+		return false
+	}
+	d, _, err := a.Authorize(ctx, authorizer.AttributesRecord{
+		User: u, Verb: "get", APIGroup: v1.GroupName, APIVersion: v1.SchemeGroupVersion.Version,
+		Resource: "posts", Subresource: "hidden", ResourceRequest: true,
+	})
+	if err != nil {
+		klog.V(2).InfoS("Checking posts/hidden failed; hiding hidden posts", "user", u.GetName(), "err", err)
+	}
+	return d == authorizer.DecisionAllow
 }
 
 func columns(obj runtime.Object) []pg.Column {
