@@ -6,13 +6,17 @@
 //   - feedback-controller owns status.delivery's stage, highestNotified,
 //     history and work.partShipped. feedback-sync keeps work items, totals
 //     and pull requests, which it refreshes from GitHub.
-//   - The server computes status.votes.datum and status.votes.total on every
-//     write. status.votes.trendingScore is server-owned too.
+//   - The server computes status.votes.datum, total, linked and
+//     trendingScore on every write, from the votes table and the 👍
+//     reactions feedback-sync reports.
+//   - When feedback-sync sets status.mergedInto, votes and subscriptions move
+//     to that post.
 //   - Everyone else (staff) can change spec.hidden and metadata only.
 package post
 
 import (
 	"context"
+	"regexp"
 	"slices"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -119,6 +123,7 @@ func (statusStrategy) GetResetFields() map[fieldpath.APIVersion]*fieldpath.Set {
 func keepServerVotes(st *v1.PostStatus, from v1.PostVotes) {
 	st.Votes.Datum = from.Datum
 	st.Votes.Total = from.Total
+	st.Votes.Linked = from.Linked
 	st.Votes.TrendingScore = from.TrendingScore
 }
 
@@ -149,6 +154,9 @@ func keepControllerDelivery(st *v1.PostStatus, from *v1.DeliveryStatus) {
 		st.Delivery = nil
 	}
 }
+
+// postNameRE matches PostName's output.
+var postNameRE = regexp.MustCompile(`^[a-z0-9-]+\.[a-z0-9._-]+\.[1-9][0-9]*$`)
 
 func validate(p *v1.Post) field.ErrorList {
 	var errs field.ErrorList
@@ -192,6 +200,20 @@ func validate(p *v1.Post) field.ErrorList {
 			if !slices.Contains(v1.ValidDeliveryStages, h.Stage) {
 				errs = append(errs, field.NotSupported(dp.Child("history").Index(i).Child("stage"), h.Stage, v1.ValidDeliveryStages))
 			}
+		}
+	}
+	for i, r := range p.Status.Votes.GitHubReactions {
+		if r.Login == "" {
+			errs = append(errs, field.Required(st.Child("votes", "githubReactions").Index(i).Child("login"), ""))
+		}
+	}
+	if m := p.Status.MergedInto; m != "" {
+		mp := st.Child("mergedInto")
+		switch {
+		case m == p.Name:
+			errs = append(errs, field.Invalid(mp, m, "a post can't be merged into itself"))
+		case !postNameRE.MatchString(m):
+			errs = append(errs, field.Invalid(mp, m, "must be a post name, org.repository.number"))
 		}
 	}
 	if len(p.Status.PublicVoters) > 10 {

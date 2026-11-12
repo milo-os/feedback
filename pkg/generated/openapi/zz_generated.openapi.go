@@ -38,6 +38,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.FeedbackSourceStatus":          schema_pkg_apis_feedback_v1alpha1_FeedbackSourceStatus(ref),
 		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubIssue":                   schema_pkg_apis_feedback_v1alpha1_GitHubIssue(ref),
 		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubLink":                    schema_pkg_apis_feedback_v1alpha1_GitHubLink(ref),
+		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubReaction":                schema_pkg_apis_feedback_v1alpha1_GitHubReaction(ref),
 		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubSource":                  schema_pkg_apis_feedback_v1alpha1_GitHubSource(ref),
 		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.IssueSelector":                 schema_pkg_apis_feedback_v1alpha1_IssueSelector(ref),
 		"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.MilestoneSource":               schema_pkg_apis_feedback_v1alpha1_MilestoneSource(ref),
@@ -1134,6 +1135,36 @@ func schema_pkg_apis_feedback_v1alpha1_GitHubLink(ref common.ReferenceCallback) 
 	}
 }
 
+func schema_pkg_apis_feedback_v1alpha1_GitHubReaction(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "GitHubReaction is one 👍 on a GitHub issue.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"login": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Login is the reactor's GitHub username.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"at": {
+						SchemaProps: spec.SchemaProps{
+							Description: "At is when they reacted.",
+							Ref:         ref(v1.Time{}.OpenAPIModelName()),
+						},
+					},
+				},
+				Required: []string{"login"},
+			},
+		},
+		Dependencies: []string{
+			v1.Time{}.OpenAPIModelName()},
+	}
+}
+
 func schema_pkg_apis_feedback_v1alpha1_GitHubSource(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -1975,6 +2006,13 @@ func schema_pkg_apis_feedback_v1alpha1_PostStatus(ref common.ReferenceCallback) 
 							Ref:         ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.PostVotes"),
 						},
 					},
+					"mergedInto": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MergedInto is the post this one was closed as a duplicate of. When feedback-sync sets it, votes and subscriptions move to that post.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"publicVoters": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
@@ -2041,16 +2079,43 @@ func schema_pkg_apis_feedback_v1alpha1_PostVotes(ref common.ReferenceCallback) c
 							Format:      "int32",
 						},
 					},
+					"linked": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Linked is how many people both voted and reacted 👍, matched by the GitHub username linked to their Datum account. They count once in Total.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
 					"trendingScore": {
 						SchemaProps: spec.SchemaProps{
-							Description: "TrendingScore weights votes with a 7-day half-life.",
+							Description: "TrendingScore weights votes with a 7-day half-life: Σ 0.5^(age_days / 7) over Datum votes and GitHub 👍 reactions whose time is known, counting linked people once.",
 							Type:        []string{"number"},
 							Format:      "double",
+						},
+					},
+					"githubReactions": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "GitHubReactions are the issue's 👍 reactions, written by feedback-sync when the count changes. Used to match linked voters and for the trending score. GitHub reactions are public.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubReaction"),
+									},
+								},
+							},
 						},
 					},
 				},
 			},
 		},
+		Dependencies: []string{
+			"go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1.GitHubReaction"},
 	}
 }
 
@@ -3879,6 +3944,13 @@ func schema_pkg_apis_feedback_v1alpha1_VoteStatus(ref common.ReferenceCallback) 
 									},
 								},
 							},
+						},
+					},
+					"githubLogin": {
+						SchemaProps: spec.SchemaProps{
+							Description: "GitHubLogin is the GitHub username linked to the voter's account when they voted, so a 👍 from the same person isn't counted twice. Never public.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},

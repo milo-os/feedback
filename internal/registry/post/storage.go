@@ -123,19 +123,22 @@ func (h hooks) beforeWrite(ctx context.Context, op pg.Op, old, obj runtime.Objec
 	if obj == nil {
 		return nil
 	}
-	return h.computeVotes(ctx, obj.(*v1.Post))
-}
-
-// computeVotes sets the Datum vote count and the total. Matching GitHub
-// reactors to linked Datum accounts, and the trending score, come with vote
-// storage.
-func (h hooks) computeVotes(ctx context.Context, p *v1.Post) error {
-	var datum int32
-	if err := h.db.Q(ctx).QueryRow(ctx, "SELECT count(*) FROM votes WHERE post_name = $1", p.Name).Scan(&datum); err != nil {
-		return apierrors.NewInternalError(fmt.Errorf("count votes: %w", err))
+	p := obj.(*v1.Post)
+	q := h.db.Q(ctx)
+	now := time.Now()
+	// feedback-sync sets mergedInto when the issue is closed as a duplicate.
+	// Votes and subscriptions follow, in this transaction.
+	if to := p.Status.MergedInto; to != "" && (old == nil || old.(*v1.Post).Status.MergedInto != to) {
+		if err := moveVotes(ctx, q, p.Name, to); err != nil {
+			return apierrors.NewInternalError(fmt.Errorf("move votes to %s: %w", to, err))
+		}
+		if _, err := Retally(ctx, h.db, to, now); err != nil {
+			return apierrors.NewInternalError(fmt.Errorf("retally %s: %w", to, err))
+		}
 	}
-	p.Status.Votes.Datum = datum
-	p.Status.Votes.Total = datum + p.Status.Votes.GitHub
+	if err := Tally(ctx, q, p, now); err != nil {
+		return apierrors.NewInternalError(err)
+	}
 	return nil
 }
 

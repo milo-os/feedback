@@ -11,7 +11,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"go.miloapis.com/feedback/internal/storage/pg"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
@@ -70,15 +69,6 @@ type SearchService struct {
 
 // searchPageSize is the search service's maximum page size.
 const searchPageSize = 100
-
-// NewSearchService returns a client for the Milo API in kubeconfig.
-func NewSearchService(kubeconfig string) (*SearchService, error) {
-	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return nil, fmt.Errorf("load search kubeconfig: %w", err)
-	}
-	return NewSearchServiceForConfig(cfg)
-}
 
 // NewSearchServiceForConfig returns a client for the API server in cfg.
 func NewSearchServiceForConfig(cfg *rest.Config) (*SearchService, error) {

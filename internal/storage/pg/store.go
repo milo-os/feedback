@@ -93,7 +93,7 @@ func (s *Store) scope(ctx context.Context) (Scope, error) {
 
 func (s *Store) table() string { return pgx.Identifier{s.kind.Table}.Sanitize() }
 
-func (s *Store) decode(rv int64, data []byte) (runtime.Object, error) {
+func (s *Store) decode(sc Scope, rv int64, data []byte) (runtime.Object, error) {
 	obj := s.kind.NewFunc()
 	if err := json.Unmarshal(data, obj); err != nil {
 		return nil, fmt.Errorf("decode %s: %w", s.kind.DefaultQualifiedResource, err)
@@ -103,11 +103,32 @@ func (s *Store) decode(rv int64, data []byte) (runtime.Object, error) {
 		return nil, err
 	}
 	m.SetResourceVersion(strconv.FormatInt(rv, 10))
+	setOwner(m, sc)
 	return obj, nil
 }
 
+// OwnerAnnotation tells staff, listing across users, whose object a
+// user-owned object is: the owner's user name. The store sets it on every
+// read and never stores it, so clients can't change it.
+const OwnerAnnotation = "feedback.miloapis.com/owner"
+
+func setOwner(m metav1.Object, sc Scope) {
+	a := m.GetAnnotations()
+	delete(a, OwnerAnnotation)
+	if sc.Type == ScopeUser {
+		if a == nil {
+			a = map[string]string{}
+		}
+		a[OwnerAnnotation] = sc.Name
+	}
+	if len(a) == 0 {
+		a = nil
+	}
+	m.SetAnnotations(a)
+}
+
 // encode returns the stored form: the object without its resourceVersion,
-// which lives in its own column.
+// which lives in its own column, or the owner annotation.
 func encode(obj runtime.Object) ([]byte, error) {
 	c := obj.DeepCopyObject()
 	m, err := meta.Accessor(c)
@@ -115,6 +136,7 @@ func encode(obj runtime.Object) ([]byte, error) {
 		return nil, err
 	}
 	m.SetResourceVersion("")
+	setOwner(m, AllScopes)
 	return json.Marshal(c)
 }
 
@@ -149,7 +171,7 @@ func (s *Store) load(ctx context.Context, sc Scope, name string, forUpdate bool)
 		if err := rows.Scan(&c.scope.Type, &c.scope.Name, &c.rv, &data); err != nil {
 			return nil, err
 		}
-		if c.obj, err = s.decode(c.rv, data); err != nil {
+		if c.obj, err = s.decode(c.scope, c.rv, data); err != nil {
 			return nil, err
 		}
 		found = append(found, &c)
@@ -251,7 +273,7 @@ func (s *Store) List(ctx context.Context, opts *metainternalversion.ListOptions)
 			return nil, err
 		}
 		last = tok
-		obj, err := s.decode(rv, data)
+		obj, err := s.decode(Scope{Type: tok.ScopeType, Name: tok.ScopeName}, rv, data)
 		if err != nil {
 			return nil, err
 		}
@@ -366,6 +388,7 @@ func (s *Store) create(ctx context.Context, sc Scope, obj runtime.Object, create
 		return nil, s.dbErr(err, m.GetName())
 	}
 	m.SetResourceVersion(strconv.FormatInt(rv, 10))
+	setOwner(m, sc)
 	if err := s.kind.afterWrite(ctx, OpCreate, nil, obj); err != nil {
 		return nil, err
 	}
@@ -489,6 +512,7 @@ func (s *Store) update(ctx context.Context, cur *current, objInfo rest.UpdatedOb
 		return nil, s.dbErr(err, m.GetName())
 	}
 	m.SetResourceVersion(strconv.FormatInt(rv, 10))
+	setOwner(m, cur.scope)
 	if err := s.kind.afterWrite(ctx, OpUpdate, old, obj); err != nil {
 		return nil, err
 	}

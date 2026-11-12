@@ -34,6 +34,11 @@ type VoteStatus struct {
 	// +optional
 	// +listType=set
 	Organizations []string `json:"organizations,omitempty"`
+	// GitHubLogin is the GitHub username linked to the voter's account when
+	// they voted, so a 👍 from the same person isn't counted twice. Never
+	// public.
+	// +optional
+	GitHubLogin string `json:"githubLogin,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

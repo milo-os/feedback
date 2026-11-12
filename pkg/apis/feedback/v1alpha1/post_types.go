@@ -116,6 +116,10 @@ type PostStatus struct {
 	// Votes are the vote totals.
 	// +optional
 	Votes PostVotes `json:"votes,omitempty"`
+	// MergedInto is the post this one was closed as a duplicate of. When
+	// feedback-sync sets it, votes and subscriptions move to that post.
+	// +optional
+	MergedInto string `json:"mergedInto,omitempty"`
 	// PublicVoters are up to 10 voters who opted in to showing their votes.
 	// +optional
 	// +listType=atomic
@@ -156,9 +160,31 @@ type PostVotes struct {
 	// GitHub is the 👍 reaction count on the issue.
 	// +optional
 	GitHub int32 `json:"github,omitempty"`
-	// TrendingScore weights votes with a 7-day half-life.
+	// Linked is how many people both voted and reacted 👍, matched by the
+	// GitHub username linked to their Datum account. They count once in
+	// Total.
+	// +optional
+	Linked int32 `json:"linked,omitempty"`
+	// TrendingScore weights votes with a 7-day half-life:
+	// Σ 0.5^(age_days / 7) over Datum votes and GitHub 👍 reactions whose
+	// time is known, counting linked people once.
 	// +optional
 	TrendingScore float64 `json:"trendingScore,omitempty"`
+	// GitHubReactions are the issue's 👍 reactions, written by feedback-sync
+	// when the count changes. Used to match linked voters and for the
+	// trending score. GitHub reactions are public.
+	// +optional
+	// +listType=atomic
+	GitHubReactions []GitHubReaction `json:"githubReactions,omitempty"`
+}
+
+// GitHubReaction is one 👍 on a GitHub issue.
+type GitHubReaction struct {
+	// Login is the reactor's GitHub username.
+	Login string `json:"login"`
+	// At is when they reacted.
+	// +optional
+	At metav1.Time `json:"at,omitempty"`
 }
 
 // PublicVoter is a voter who opted in to being shown.
