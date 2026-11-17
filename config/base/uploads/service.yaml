@@ -1,0 +1,13 @@
+# The environment routes a public hostname to this Service; TLS is
+# terminated in front of it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: feedback-uploads
+spec:
+  selector:
+    app: feedback-uploads
+  ports:
+  - name: http
+    port: 80
+    targetPort: http

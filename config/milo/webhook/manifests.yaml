@@ -10,6 +10,26 @@ webhooks:
     service:
       name: feedback-operator-webhook
       namespace: feedback-system
+      path: /mutate-attachments
+  failurePolicy: Fail
+  name: attachments.feedback.miloapis.com
+  rules:
+  - apiGroups:
+    - feedback.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - submissions
+    - securityreports
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: feedback-operator-webhook
+      namespace: feedback-system
       path: /mutate-owner
   failurePolicy: Fail
   name: owner.feedback.miloapis.com

@@ -17,6 +17,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"go.miloapis.com/feedback/internal/attachments"
 	"go.miloapis.com/feedback/internal/controller"
 	"go.miloapis.com/feedback/internal/index"
 	"go.miloapis.com/feedback/internal/milo"
@@ -42,6 +43,7 @@ type operatorOptions struct {
 	webhookCertDir          string
 	submissionLimit         int
 	submissionWindow        time.Duration
+	attachmentsBucket       string
 }
 
 func newOperatorCommand() *cobra.Command {
@@ -65,6 +67,7 @@ func newOperatorCommand() *cobra.Command {
 	f.StringVar(&o.webhookCertDir, "webhook-cert-dir", "/etc/kubernetes/pki/webhook", "Directory holding tls.crt and tls.key for the webhook server.")
 	f.IntVar(&o.submissionLimit, "submission-limit", 5, "Submissions a user may send per --submission-window; 0 disables the limit.")
 	f.DurationVar(&o.submissionWindow, "submission-window", 10*time.Minute, "Window for --submission-limit.")
+	f.StringVar(&o.attachmentsBucket, "attachments-bucket", "", "Bucket URL for attachments, shared with feedback-uploads. Empty refuses attachments.")
 	goFlags := flag.NewFlagSet("zap", flag.ExitOnError)
 	zapOpts.BindFlags(goFlags)
 	f.AddGoFlagSet(goFlags)
@@ -105,13 +108,22 @@ func runOperator(o operatorOptions) error {
 	if err := index.Add(ctx, mgr); err != nil {
 		return fmt.Errorf("adding indexes: %w", err)
 	}
-	webhook.Register(mgr, webhook.Options{SubmissionLimit: o.submissionLimit, SubmissionWindow: o.submissionWindow})
+	var files *attachments.Store
+	if o.attachmentsBucket != "" {
+		if files, err = attachments.Open(ctx, o.attachmentsBucket); err != nil {
+			return err
+		}
+		defer files.Close()
+	} else {
+		log.Info("No --attachments-bucket; submissions and reports with attachments will be refused")
+	}
+	webhook.Register(mgr, webhook.Options{SubmissionLimit: o.submissionLimit, SubmissionWindow: o.submissionWindow, Files: files})
 
 	users, err := milo.NewClient(miloConfig)
 	if err != nil {
 		return fmt.Errorf("creating Milo user client: %w", err)
 	}
-	if err := controller.Setup(ctx, mgr, controller.Options{Users: users}); err != nil {
+	if err := controller.Setup(ctx, mgr, controller.Options{Users: users, Files: files}); err != nil {
 		return fmt.Errorf("setting up controllers: %w", err)
 	}
 

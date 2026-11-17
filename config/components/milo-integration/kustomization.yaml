@@ -14,7 +14,9 @@ kind: Component
 #     trusts the admission webhooks.
 #   - Mounts the feedback-milo-kubeconfig ConfigMap, which consumers provide
 #     in the feedback-system namespace. It points at Milo and at the mounted
-#     client certificate and trust bundle.
+#     client certificate (/etc/kubernetes/pki/client) and trust bundle
+#     (/etc/kubernetes/pki/trust). feedback-uploads mounts the same files, with
+#     its own certificate, system:feedback-uploads@feedback.miloapis.com.
 #
 # The namespace needs the label
 # `infra.datum.net/inject-datum-control-plane-trust-bundle: ""` so
@@ -74,6 +76,46 @@ patches:
                   readOnly: true
                   volumeAttributes:
                     csi.cert-manager.io/common-name: system:feedback-operator@feedback.miloapis.com
+                    csi.cert-manager.io/fs-group: "65532"
+                    csi.cert-manager.io/issuer-kind: ClusterIssuer
+                    csi.cert-manager.io/issuer-name: datum-control-plane
+                    csi.cert-manager.io/key-usages: client auth
+  - target:
+      kind: Deployment
+      name: feedback-uploads
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: feedback-uploads
+      spec:
+        template:
+          spec:
+            containers:
+              - name: uploads
+                volumeMounts:
+                  - mountPath: /etc/kubernetes/pki/trust
+                    name: trust-bundle
+                    readOnly: true
+                  - mountPath: /etc/kubernetes/pki/client
+                    name: client-cert
+                    readOnly: true
+                  - mountPath: /etc/kubernetes/milo
+                    name: milo-kubeconfig
+                    readOnly: true
+            volumes:
+              - name: trust-bundle
+                configMap:
+                  name: datum-control-plane-trust-bundle
+              - name: milo-kubeconfig
+                configMap:
+                  name: feedback-milo-kubeconfig
+              - name: client-cert
+                csi:
+                  driver: csi.cert-manager.io
+                  readOnly: true
+                  volumeAttributes:
+                    csi.cert-manager.io/common-name: system:feedback-uploads@feedback.miloapis.com
                     csi.cert-manager.io/fs-group: "65532"
                     csi.cert-manager.io/issuer-kind: ClusterIssuer
                     csi.cert-manager.io/issuer-name: datum-control-plane

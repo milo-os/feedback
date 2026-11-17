@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"go.miloapis.com/feedback/internal/attachments"
 	"go.miloapis.com/feedback/internal/index"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
@@ -23,17 +24,28 @@ import (
 // decision has been carried out.
 const ConditionApplied = "Applied"
 
+// AttachmentsFinalizer is on a submission or report whose attachments the
+// operator copied under it. Deleting the object deletes the files, then the
+// finalizer.
+const AttachmentsFinalizer = "feedback.miloapis.com/attachments"
+
 // SubmissionReconciler gives every new submission its SubmissionReview, owned
-// by the submission so it goes with it, and starts it in PendingReview.
+// by the submission so it goes with it, and starts it in PendingReview. It
+// copies attached uploads under the submission before the bucket's lifecycle
+// rule deletes them, and deletes them with the submission.
 type SubmissionReconciler struct {
 	client.Client
+	Files *attachments.Store
 }
 
 // Reconcile implements reconcile.Reconciler.
 func (r *SubmissionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	var sub v1.Submission
-	if err := r.Get(ctx, req.NamespacedName, &sub); err != nil || sub.DeletionTimestamp != nil {
+	if err := r.Get(ctx, req.NamespacedName, &sub); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	if done, err := keepAttachments(ctx, r.Client, r.Files, attachments.Submission, &sub, sub.Spec.UserRef.Name, sub.Spec.Attachments); done || err != nil {
+		return ctrl.Result{}, err
 	}
 	review := &v1.SubmissionReview{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}
 	if err := controllerutil.SetOwnerReference(&sub, review, r.Scheme()); err != nil {
@@ -47,6 +59,41 @@ func (r *SubmissionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, r.Status().Update(ctx, &sub)
 	}
 	return ctrl.Result{}, nil
+}
+
+// keepAttachments copies obj's attachments under it and adds
+// AttachmentsFinalizer, or, when obj is being deleted, deletes them and
+// removes the finalizer. done reports that obj is being deleted, so there is
+// nothing else to do.
+func keepAttachments(ctx context.Context, c client.Client, files *attachments.Store, p attachments.Purpose, obj client.Object, owner string, atts []v1.AttachmentReference) (done bool, err error) {
+	has := controllerutil.ContainsFinalizer(obj, AttachmentsFinalizer)
+	if obj.GetDeletionTimestamp() != nil {
+		if !has {
+			return true, nil
+		}
+		if files == nil {
+			return true, fmt.Errorf("can't delete the attachments of %s: no attachments bucket", obj.GetName())
+		}
+		if err := files.DeleteParent(ctx, p, obj.GetName()); err != nil {
+			return true, err
+		}
+		patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+		controllerutil.RemoveFinalizer(obj, AttachmentsFinalizer)
+		return true, c.Patch(ctx, obj, patch)
+	}
+	if has || len(atts) == 0 || files == nil {
+		return false, nil
+	}
+	refs := make([]string, len(atts))
+	for i, a := range atts {
+		refs[i] = a.UploadRef
+	}
+	if err := files.Attach(ctx, p, owner, obj.GetName(), refs); err != nil {
+		return false, fmt.Errorf("copying attachments: %w", err)
+	}
+	patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+	controllerutil.AddFinalizer(obj, AttachmentsFinalizer)
+	return false, c.Patch(ctx, obj, patch)
 }
 
 // SetupWithManager registers the reconciler.

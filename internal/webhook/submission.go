@@ -30,8 +30,6 @@ type SubmissionCheck struct {
 	Window time.Duration
 	// Now returns the current time; tests replace it.
 	Now func() time.Time
-	// Attachments reports whether attachments can be accepted.
-	Attachments bool
 }
 
 var _ admission.Handler = SubmissionCheck{}
@@ -47,9 +45,6 @@ func (c SubmissionCheck) Handle(ctx context.Context, req admission.Request) admi
 	sub := &v1.Submission{}
 	if err := json.Unmarshal(req.Object.Raw, sub); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
-	}
-	if len(sub.Spec.Attachments) > 0 && !c.Attachments {
-		return admission.Denied("attachments aren't available yet; send the feedback without them")
 	}
 	if c.Limit <= 0 {
 		return admission.Allowed("")

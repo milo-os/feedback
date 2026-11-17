@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feedback-uploads
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: feedback-uploads
+  template:
+    metadata:
+      labels:
+        app: feedback-uploads
+    spec:
+      serviceAccountName: feedback-uploads
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: uploads
+        image: ghcr.io/milo-os/feedback:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+          capabilities:
+            drop:
+            - ALL
+        command:
+        - /feedback
+        - uploads
+        args:
+        # The milo-integration component mounts this kubeconfig.
+        - --milo-kubeconfig=/etc/kubernetes/milo/kubeconfig
+        - --attachments-bucket=$(ATTACHMENTS_BUCKET)
+        - --zap-encoder=json
+        env:
+        # The environment sets the bucket, e.g. gs://feedback-attachments-staging.
+        # Its lifecycle rule should delete uploads/ objects after one day.
+        - name: ATTACHMENTS_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: feedback-config
+              key: attachments-bucket
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http

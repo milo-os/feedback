@@ -17,8 +17,8 @@ webhooks.
 ## Status
 
 The CRDs are defined. The operator sets owners and reviewers in admission,
-and reconciles votes, follows and submission reviews. Attachments, triage,
-security reports and digests are tracked as sub-issues of the epic.
+reconciles votes, follows and submission reviews, and stores attachments.
+Triage, security reports and digests are tracked as sub-issues of the epic.
 
 | Resource | Who writes it | Who reads it |
 | --- | --- | --- |
@@ -68,6 +68,24 @@ decided on a `SubmissionReview`.
   - `Approved` waits until feedback-sync creates the GitHub issue and syncs a post annotated `feedback.miloapis.com/submission: <name>`. It then links the submission to that post and has the submitter follow (`reason: submitted`) and vote.
   - The `Applied` condition and `status.applied` record when the decision has been fully carried out.
 
+## Attachments
+
+CRDs can't take file uploads, so `feedback uploads` (the `feedback-uploads` Deployment) handles them. Clients use the same bearer token they use for Milo.
+
+```
+POST /users/{user}/uploads/{submissions|securityreports}?name=shot.png   (body: the file, with its Content-Type)
+GET  /users/{user}/{submissions|securityreports}/{name}/attachments/{ref} (the owner)
+GET  /{submissions|securityreports}/{name}/attachments/{ref}             (staff)
+```
+
+- **Checking the caller.** A Milo `TokenReview` identifies the caller. A `SubjectAccessReview` checks that they may create (to upload) or get (to download) that resource in the context the path names. In a user's context, the service also checks that the object is theirs.
+- **Files accepted.** Files are type-checked against their content: PNG, JPEG, GIF, WebP, PDF, text and JSON only. The size limit is 10 MiB by default, and each user gets a per-minute upload limit.
+- **Storage.** Files land under `uploads/<purpose>/<user>/` in the bucket.
+- **Attaching.** The `attachments` mutating webhook checks every `uploadRef` on a new submission or report is the owner's upload for that purpose, and sets its name and type from the upload.
+- **Keeping and deleting.** The operator copies attached files under `submissions/<name>/` as soon as the submission exists, and adds the `feedback.miloapis.com/attachments` finalizer. Deleting the submission deletes its files.
+- **Lifecycle rule.** The bucket's lifecycle rule should delete `uploads/` after a day.
+- **Configuration.** Set the bucket in the `feedback-config` ConfigMap (`attachments-bucket`). The operator and the upload service share it.
+
 ## Roles
 
 | Role | For |
@@ -84,15 +102,18 @@ client certificates and get Kubernetes RBAC in Milo (`config/milo/rbac`).
 ## Layout
 
 ```
-cmd/feedback/             operator and version commands
+cmd/feedback/             operator, uploads and version commands
+internal/attachments/     the attachments bucket
 internal/controller/      reconcilers
 internal/identity/        who a request comes from, from Milo's user info
 internal/index/           cache field indexes shared by reconcilers and webhooks
 internal/milo/            voter lookups in Milo
+internal/ratelimit/       per-user token bucket
+internal/uploads/         the feedback-uploads HTTP service
 internal/webhook/         admission webhooks Milo calls
 pkg/apis/feedback/        feedback.miloapis.com/v1alpha1 types (CRDs)
 config/crd/               generated CRDs, installed in Milo
-config/base/              operator Deployment, Services, leader election RBAC
+config/base/              operator and uploads Deployments, Services, leader election RBAC
 config/components/        milo-integration: Milo kubeconfig, client and webhook certificates
 config/milo/              applied to Milo: IAM (iam/), RBAC for the service's
                           components (rbac/), webhook config (webhook/), and

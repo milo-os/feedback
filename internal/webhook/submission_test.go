@@ -56,9 +56,6 @@ func TestSubmissionCheck(t *testing.T) {
 	if resp := c.Handle(context.Background(), request(t, admissionv1.Create, "submissions", user("u2", "false"), newSub("u2", 0), nil)); resp.Allowed {
 		t.Error("unverified email allowed")
 	}
-	if resp := c.Handle(context.Background(), request(t, admissionv1.Create, "submissions", user("u2", "true"), newSub("u2", 1), nil)); resp.Allowed {
-		t.Error("attachments allowed without uploads")
-	}
 	c.Limit = 0
 	if resp := c.Handle(context.Background(), request(t, admissionv1.Create, "submissions", user("u1", "true"), newSub("u1", 0), nil)); !resp.Allowed {
 		t.Error("limit 0 still limits")

@@ -19,9 +19,11 @@ rules:
   - apiGroups: [feedback.miloapis.com]
     resources: [votes, subscriptions, submissionreviews, securityreports, securityacknowledgements, feedbackdigests]
     verbs: [create, update, patch, delete]
+  # delete for reports moved to the security track; update and patch only to
+  # add and remove the attachments finalizer.
   - apiGroups: [feedback.miloapis.com]
     resources: [submissions]
-    verbs: [delete]
+    verbs: [update, patch, delete]
   # Voters' organizations and linked GitHub usernames, for staff analytics
   # and so a 👍 from the same person isn't counted twice.
   - apiGroups: [resourcemanager.miloapis.com]
