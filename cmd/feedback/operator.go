@@ -16,6 +16,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"go.miloapis.com/feedback/internal/controller"
+	"go.miloapis.com/feedback/internal/milo"
 	"go.miloapis.com/feedback/internal/version"
 	"go.miloapis.com/feedback/internal/webhook"
 	feedbackv1alpha1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
@@ -95,6 +97,15 @@ func runOperator(o operatorOptions) error {
 
 	webhook.Register(mgr)
 
+	users, err := milo.NewClient(miloConfig)
+	if err != nil {
+		return fmt.Errorf("creating Milo user client: %w", err)
+	}
+	ctx := ctrl.SetupSignalHandler()
+	if err := controller.Setup(ctx, mgr, controller.Options{Users: users}); err != nil {
+		return fmt.Errorf("setting up controllers: %w", err)
+	}
+
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		return err
 	}
@@ -103,7 +114,7 @@ func runOperator(o operatorOptions) error {
 	}
 
 	log.Info("Starting manager")
-	return mgr.Start(ctrl.SetupSignalHandler())
+	return mgr.Start(ctx)
 }
 
 // restConfig loads kubeconfig, or the in-cluster config when it is empty.

@@ -22,6 +22,14 @@ rules:
   - apiGroups: [feedback.miloapis.com]
     resources: [submissions]
     verbs: [delete]
+  # Voters' organizations and linked GitHub usernames, for staff analytics
+  # and so a 👍 from the same person isn't counted twice.
+  - apiGroups: [resourcemanager.miloapis.com]
+    resources: [organizationmemberships]
+    verbs: [list]
+  - apiGroups: [identity.miloapis.com]
+    resources: [useridentities]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

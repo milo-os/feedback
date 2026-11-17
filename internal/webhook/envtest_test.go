@@ -84,10 +84,20 @@ func TestWebhooksInFrontOfAnAPIServer(t *testing.T) {
 		}
 	}
 
+	if err := staff.Create(ctx, &v1.Post{ObjectMeta: metav1.ObjectMeta{Name: "p1"}}); err != nil {
+		t.Fatal(err)
+	}
+
 	t.Run("the caller becomes the owner", func(t *testing.T) {
 		v := vote("p1.u1", "")
-		if err := ada.Create(ctx, v); err != nil {
-			t.Fatal(err)
+		// The webhook reads posts from the operator's cache, which catches up
+		// with the new post shortly.
+		deadline := time.Now().Add(10 * time.Second)
+		for err := ada.Create(ctx, v); err != nil; err = ada.Create(ctx, v) {
+			if time.Now().After(deadline) {
+				t.Fatal(err)
+			}
+			time.Sleep(100 * time.Millisecond)
 		}
 		if v.Spec.UserRef.Name != "u1" {
 			t.Errorf("owner = %q", v.Spec.UserRef.Name)
