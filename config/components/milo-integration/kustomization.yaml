@@ -6,8 +6,10 @@ kind: Component
 #   - Mounts the datum-control-plane-trust-bundle ConfigMap (populated by
 #     trust-manager) so the operator can verify Milo's server certificate.
 #   - Mounts a client certificate issued by the datum-control-plane
-#     ClusterIssuer. Its common name is the operator's user in Milo, which
-#     Milo's RBAC grants what the operator needs. It is not system:masters.
+#     ClusterIssuer. Its common name,
+#     system:feedback-operator@feedback.miloapis.com, is the operator's user
+#     in Milo, which Milo's RBAC grants what the operator needs. It is not
+#     system:masters.
 #   - Replaces the webhook certificate with one from the same issuer, so Milo
 #     trusts the admission webhooks.
 #   - Mounts the feedback-milo-kubeconfig ConfigMap, which consumers provide
@@ -71,7 +73,7 @@ patches:
                   driver: csi.cert-manager.io
                   readOnly: true
                   volumeAttributes:
-                    csi.cert-manager.io/common-name: feedback-operator
+                    csi.cert-manager.io/common-name: system:feedback-operator@feedback.miloapis.com
                     csi.cert-manager.io/fs-group: "65532"
                     csi.cert-manager.io/issuer-kind: ClusterIssuer
                     csi.cert-manager.io/issuer-name: datum-control-plane
