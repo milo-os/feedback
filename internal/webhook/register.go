@@ -29,7 +29,7 @@ func Register(mgr manager.Manager, o Options) {
 	s.Register("/mutate-attachments", &webhook.Admission{Handler: Attachments{Files: o.Files}})
 	s.Register("/validate-vote", &webhook.Admission{Handler: VoteCheck{Posts: c}})
 	s.Register("/validate-submission", &webhook.Admission{Handler: SubmissionCheck{
-		Submissions: c, Limit: o.SubmissionLimit, Window: o.SubmissionWindow,
+		Submissions: c, Limit: o.SubmissionLimit, Window: o.SubmissionWindow, Admitted: NewAdmitted(),
 	}})
 	s.Register("/validate-submissionreview", &webhook.Admission{Handler: ReviewCheck{Posts: c}})
 	s.Register("/validate-securityreport", &webhook.Admission{Handler: SecurityReportCheck{}})

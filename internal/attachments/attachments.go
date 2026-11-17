@@ -15,7 +15,6 @@
 package attachments
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -216,24 +215,28 @@ func (s *Store) CopyParent(ctx context.Context, from, to Purpose, fromParent, to
 	}
 }
 
-// File is an attached file.
+// File is an attached file. Get returns its name, type and size; Open
+// streams its content, so serving a file never holds it in memory.
 type File struct {
 	Name        string
 	ContentType string
-	Data        []byte
+	Size        int64
+
+	bucket *blob.Bucket
+	key    string
 }
 
-// Get reads an attachment of parent. Until the operator has copied it, it is
+// Get finds an attachment of parent. Until the operator has copied it, it is
 // read from owner's uploads.
 func (s *Store) Get(ctx context.Context, p Purpose, parent, owner, ref string) (*File, error) {
-	f, err := s.read(ctx, ParentPrefix(p, parent)+url.PathEscape(ref))
+	f, err := s.stat(ctx, ParentPrefix(p, parent)+url.PathEscape(ref))
 	if errors.Is(err, ErrNotFound) && owner != "" {
-		return s.read(ctx, uploadKey(p, owner, ref))
+		return s.stat(ctx, uploadKey(p, owner, ref))
 	}
 	return f, err
 }
 
-func (s *Store) read(ctx context.Context, key string) (*File, error) {
+func (s *Store) stat(ctx context.Context, key string) (*File, error) {
 	attrs, err := s.bucket.Attributes(ctx, key)
 	if gcerrors.Code(err) == gcerrors.NotFound {
 		return nil, ErrNotFound
@@ -241,16 +244,24 @@ func (s *Store) read(ctx context.Context, key string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	r, err := s.bucket.NewReader(ctx, key, nil)
+	return &File{
+		Name: attrs.Metadata["name"], ContentType: attrs.ContentType, Size: attrs.Size,
+		bucket: s.bucket, key: key,
+	}, nil
+}
+
+// Open returns a reader for the file's content. ctx bounds the whole read,
+// not just opening it. The caller must close the reader. A file deleted since
+// Get is ErrNotFound.
+func (f *File) Open(ctx context.Context) (io.ReadCloser, error) {
+	r, err := f.bucket.NewReader(ctx, f.key, nil)
+	if gcerrors.Code(err) == gcerrors.NotFound {
+		return nil, ErrNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, io.LimitReader(r, int64(s.MaxSize)+1)); err != nil {
-		return nil, err
-	}
-	return &File{Name: attrs.Metadata["name"], ContentType: attrs.ContentType, Data: buf.Bytes()}, nil
+	return r, nil
 }
 
 // DeleteParent deletes every attachment of a parent.

@@ -82,6 +82,7 @@ GET  /{submissions|securityreports}/{name}/attachments/{ref}             (staff)
 - **Checking the caller.** A Milo `TokenReview` identifies the caller. A `SubjectAccessReview` checks that they may create (to upload) or get (to download) that resource in the context the path names. In a user's context, the service also checks that the object is theirs.
 - **Files accepted.** Files are type-checked against their content: PNG, JPEG, GIF, WebP, PDF, text and JSON only. The size limit is 10 MiB by default, and each user gets a per-minute upload limit.
 - **Storage.** Files land under `uploads/<purpose>/<user>/` in the bucket.
+- **Limits per replica.** Downloads stream from the bucket. Each upload is buffered, up to the size limit, to check its type. `--max-concurrent-uploads` (default 4) and `--max-concurrent-downloads` (default 32) cap transfers on one replica; past them it answers 503 with `Retry-After`. Each transfer gets a deadline sized for its file, at 64 KiB/s plus 30 seconds.
 - **Attaching.** The `attachments` mutating webhook checks every `uploadRef` on a new submission or report is the owner's upload for that purpose, and sets its name and type from the upload.
 - **Keeping and deleting.** The operator copies attached files under `submissions/<name>/` as soon as the submission exists, and adds the `feedback.miloapis.com/attachments` finalizer. Deleting the submission deletes its files.
 - **Lifecycle rule.** The bucket's lifecycle rule should delete `uploads/` after a day.
@@ -98,7 +99,7 @@ GET  /{submissions|securityreports}/{name}/attachments/{ref}             (staff)
   - It creates the report's `SecurityReportTriage` for the Security Team's private notes.
   - It copies attachments under `security-reports/<name>/` and deletes them with the report.
   - A `Fixed` or `Disclosed` report with public credit gets a `SecurityAcknowledgement` with the name, link, month and severity. It's deleted if that stops being true.
-- **`move-to-security` reconciler:** carries out `MoveToSecurity` review decisions. It creates a report owned by the submitter and named after the submission, copies the attachments, then deletes the submission, which takes its review and files with it.
+- **`move-to-security` reconciler:** carries out `MoveToSecurity` review decisions. It creates a report owned by the submitter, named `<submission>-<submission UID>` and annotated with the submission's name and UID (`feedback.miloapis.com/moved-from-submission`, `-uid`). It reads the report back and checks the name, UID and owner before it copies the attachments and deletes the submission, which takes its review and files with it. If a report it didn't create already has that name, it keeps the submission and its files and sets `Applied=False` with reason `ReportNameTaken` on the review; the move is tried again when a report is deleted. Only the operator can set the moved-from annotations, and they can't change.
 
 ## Audit and activity
 

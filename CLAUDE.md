@@ -28,8 +28,10 @@ datum-cloud/enhancements#943.
 - Side effects are reconciled by the operator, not done in the request.
   Every reconcile step must be idempotent and keyed on deterministic names.
 - GitHub-derived fields live in `status` and are written only by
-  `feedback-sync`. The operator owns post `votes` and `delivery`; both use
-  server-side apply with their own field manager. Staff can only patch
+  `feedback-sync`. The operator owns post `votes`, `delivery` and
+  `conditions`; all use server-side apply with their own field manager.
+  Never apply two of them with the same manager: an apply drops fields its
+  manager applied before and left out. Staff can only patch
   `spec.hidden` on posts.
 - `Submission`, `SubmissionReview`, `SecurityReport`, `SecurityReportTriage`
   and `FeedbackDigest` are audited at `Metadata` only (a rule in Milo's audit
