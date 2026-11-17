@@ -52,6 +52,14 @@ func Setup(ctx context.Context, mgr ctrl.Manager, o Options) error {
 	}); err != nil {
 		return err
 	}
+	if err := idx.IndexField(ctx, &v1.Post{}, mergedIntoIndex, func(obj client.Object) []string {
+		if into := obj.(*v1.Post).Status.MergedInto; into != "" {
+			return []string{into}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
 	c := mgr.GetClient()
 	for _, r := range []interface{ SetupWithManager(ctrl.Manager) error }{
 		&PostVotesReconciler{Client: c, Options: o},
