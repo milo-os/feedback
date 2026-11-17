@@ -1,0 +1,78 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# milo-integration connects the operator to a Milo control plane:
+#
+#   - Mounts the datum-control-plane-trust-bundle ConfigMap (populated by
+#     trust-manager) so the operator can verify Milo's server certificate.
+#   - Mounts a client certificate issued by the datum-control-plane
+#     ClusterIssuer. Its common name is the operator's user in Milo, which
+#     Milo's RBAC grants what the operator needs. It is not system:masters.
+#   - Replaces the webhook certificate with one from the same issuer, so Milo
+#     trusts the admission webhooks.
+#   - Mounts the feedback-milo-kubeconfig ConfigMap, which consumers provide
+#     in the feedback-system namespace. It points at Milo and at the mounted
+#     client certificate and trust bundle.
+#
+# The namespace needs the label
+# `infra.datum.net/inject-datum-control-plane-trust-bundle: ""` so
+# trust-manager populates the trust bundle ConfigMap.
+
+patches:
+  - target:
+      kind: Deployment
+      name: feedback-operator
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/volumes/0
+        value:
+          name: webhook-cert
+          csi:
+            driver: csi.cert-manager.io
+            readOnly: true
+            volumeAttributes:
+              csi.cert-manager.io/common-name: feedback-operator-webhook
+              csi.cert-manager.io/fs-group: "65532"
+              csi.cert-manager.io/issuer-kind: ClusterIssuer
+              csi.cert-manager.io/issuer-name: datum-control-plane
+              csi.cert-manager.io/dns-names: feedback-operator-webhook.feedback-system.svc,feedback-operator-webhook.feedback-system.svc.cluster.local
+  - target:
+      kind: Deployment
+      name: feedback-operator
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: feedback-operator
+      spec:
+        template:
+          spec:
+            containers:
+              - name: operator
+                volumeMounts:
+                  - mountPath: /etc/kubernetes/pki/trust
+                    name: trust-bundle
+                    readOnly: true
+                  - mountPath: /etc/kubernetes/pki/client
+                    name: client-cert
+                    readOnly: true
+                  - mountPath: /etc/kubernetes/milo
+                    name: milo-kubeconfig
+                    readOnly: true
+            volumes:
+              - name: trust-bundle
+                configMap:
+                  name: datum-control-plane-trust-bundle
+              - name: milo-kubeconfig
+                configMap:
+                  name: feedback-milo-kubeconfig
+              - name: client-cert
+                csi:
+                  driver: csi.cert-manager.io
+                  readOnly: true
+                  volumeAttributes:
+                    csi.cert-manager.io/common-name: feedback-operator
+                    csi.cert-manager.io/fs-group: "65532"
+                    csi.cert-manager.io/issuer-kind: ClusterIssuer
+                    csi.cert-manager.io/issuer-name: datum-control-plane
+                    csi.cert-manager.io/key-usages: client auth

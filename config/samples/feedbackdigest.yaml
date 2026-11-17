@@ -1,0 +1,13 @@
+# Written by the operator.
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: FeedbackDigest
+metadata:
+  name: "312983457298312345"
+spec:
+  userRef:
+    name: "312983457298312345"
+  items:
+    - event: picked-up
+      post: datum-cloud.enhancements.912
+      at: "2026-10-07T09:40:00Z"
+  itemCount: 1

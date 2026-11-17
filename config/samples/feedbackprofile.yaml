@@ -1,0 +1,8 @@
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: FeedbackProfile
+metadata:
+  name: "312983457298312345"
+spec:
+  userRef:
+    name: "312983457298312345"
+  showPublicVotes: true

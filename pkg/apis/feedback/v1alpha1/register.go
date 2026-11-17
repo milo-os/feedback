@@ -1,14 +1,12 @@
 package v1alpha1
 
 import (
-	"fmt"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the API group served by the feedback apiserver.
+// GroupName is the API group of every feedback resource.
 const GroupName = "feedback.miloapis.com"
 
 // SchemeGroupVersion is the group version used to register these objects.
@@ -31,20 +29,27 @@ func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-func addKnownTypes(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(SchemeGroupVersion,
-		&FeedbackSource{},
-		&FeedbackSourceList{},
-	)
-	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
-	return scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("FeedbackSource"), feedbackSourceFieldLabel)
+// KnownTypes lists every object type in the group.
+func KnownTypes() []runtime.Object {
+	return []runtime.Object{
+		&FeedbackSource{}, &FeedbackSourceList{},
+		&Post{}, &PostList{},
+		&Release{}, &ReleaseList{},
+		&ChangelogEntry{}, &ChangelogEntryList{},
+		&Vote{}, &VoteList{},
+		&Subscription{}, &SubscriptionList{},
+		&Submission{}, &SubmissionList{},
+		&SubmissionReview{}, &SubmissionReviewList{},
+		&SecurityReport{}, &SecurityReportList{},
+		&SecurityReportTriage{}, &SecurityReportTriageList{},
+		&SecurityAcknowledgement{}, &SecurityAcknowledgementList{},
+		&FeedbackProfile{}, &FeedbackProfileList{},
+		&FeedbackDigest{}, &FeedbackDigestList{},
+	}
 }
 
-// feedbackSourceFieldLabel lists the field selectors FeedbackSource supports.
-func feedbackSourceFieldLabel(label, value string) (string, string, error) {
-	switch label {
-	case "metadata.name", "spec.github.org":
-		return label, value, nil
-	}
-	return "", "", fmt.Errorf("field label not supported: %s", label)
+func addKnownTypes(scheme *runtime.Scheme) error {
+	scheme.AddKnownTypes(SchemeGroupVersion, KnownTypes()...)
+	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
+	return nil
 }

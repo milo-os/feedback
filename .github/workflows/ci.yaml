@@ -11,3 +11,15 @@ permissions:
 jobs:
   ci:
     uses: datum-cloud/actions/.github/workflows/ci-basic.yaml@v1.26.0
+
+  envtest:
+    # ci-basic runs go test without an API server, so the CRD tests skip
+    # there. This job runs them against envtest.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+      - uses: go-task/setup-task@v2
+      - run: task test

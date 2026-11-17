@@ -1,8 +1,13 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+namespace: feedback-system
+
 resources:
   - ../../base
+
+components:
+  - ../../components/milo-integration
 
 images:
   - name: ghcr.io/milo-os/feedback

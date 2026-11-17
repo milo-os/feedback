@@ -1,6 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
+# Applied to Milo. The CRDs themselves are in config/crd; each CRD declares
+# its discovery contexts and access rules with annotations.
 components:
   - iam/
-  - discovery/

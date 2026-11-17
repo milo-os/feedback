@@ -1,0 +1,8 @@
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: SecurityReportTriage
+metadata:
+  name: sec-4m8q1
+spec:
+  assignee: staff:jdoe@datum.net
+  tracking: https://github.com/datum-cloud/datum/security/advisories/GHSA-xxxx
+  notes: Reproduced on staging.

@@ -1,0 +1,277 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+    discovery.miloapis.com/parent-contexts: Platform;User
+    iam.miloapis.com/owner-field: spec.userRef.name
+  name: securityreports.feedback.miloapis.com
+spec:
+  group: feedback.miloapis.com
+  names:
+    kind: SecurityReport
+    listKind: SecurityReportList
+    plural: securityreports
+    singular: securityreport
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.title
+      name: Title
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.severity
+      name: Severity
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          SecurityReport is a private vulnerability report. Reporters create and read
+          their own in the user context. Only the Security Team role can list every
+          report and write status; what the reporter must not see lives on its
+          SecurityReportTriage. Reports are never synced to GitHub, indexed or sent
+          to the AI gateway, and are audited at Metadata level only.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SecurityReportSpec is what the reporter submitted.
+            properties:
+              affected:
+                description: Affected is free text that helps routing, e.g. "connectors".
+                maxLength: 200
+                type: string
+              attachments:
+                description: Attachments reference files uploaded to feedback-uploads.
+                items:
+                  description: AttachmentReference points at a file uploaded to feedback-uploads.
+                  properties:
+                    contentType:
+                      description: |-
+                        ContentType is the file's media type. Set by the admission webhook from
+                        the upload.
+                      maxLength: 255
+                      type: string
+                    name:
+                      description: |-
+                        Name is the file name shown to reviewers. Set by the admission webhook
+                        from the upload.
+                      maxLength: 255
+                      type: string
+                    uploadRef:
+                      description: UploadRef is the reference feedback-uploads returned.
+                      maxLength: 128
+                      minLength: 1
+                      type: string
+                  required:
+                  - uploadRef
+                  type: object
+                maxItems: 5
+                type: array
+                x-kubernetes-list-type: atomic
+              context:
+                description: SecurityReportContext is where the report came from.
+                properties:
+                  client:
+                    description: Client is the surface a request came from.
+                    enum:
+                    - website
+                    - portal
+                    - datumctl
+                    - patch
+                    - email
+                    - github
+                    type: string
+                  clientVersion:
+                    type: string
+                  filedByAgent:
+                    description: |-
+                      FiledByAgent is set when an agent (Patch, non-interactive datumctl)
+                      filed the report.
+                    type: boolean
+                  organization:
+                    type: string
+                type: object
+              credit:
+                description: Credit is how the reporter wants to be credited.
+                properties:
+                  name:
+                    type: string
+                  public:
+                    description: |-
+                      Public lists the reporter on the acknowledgements page once the report
+                      is Fixed or Disclosed.
+                    type: boolean
+                  url:
+                    type: string
+                type: object
+              description:
+                maxLength: 50000
+                minLength: 1
+                type: string
+              impact:
+                maxLength: 10000
+                type: string
+              reporter:
+                description: |-
+                  Reporter is set only on reports the Security Team logs for someone
+                  without a Datum account (from email or GitHub private reporting).
+                properties:
+                  email:
+                    type: string
+                  githubLogin:
+                    type: string
+                type: object
+              stepsToReproduce:
+                maxLength: 50000
+                type: string
+              title:
+                maxLength: 200
+                minLength: 1
+                type: string
+              userRef:
+                description: |-
+                  UserRef is the reporter, set by the admission webhook. Empty for reports
+                  the Security Team logs for someone without a Datum account.
+                properties:
+                  name:
+                    maxLength: 63
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - description
+            - title
+            type: object
+            x-kubernetes-validations:
+            - message: reports can't be changed after they are sent
+              rule: self == oldSelf
+          status:
+            description: SecurityReportStatus is written by the Security Team.
+            properties:
+              advisory:
+                description: SecurityAdvisory is the published advisory.
+                properties:
+                  cve:
+                    type: string
+                  url:
+                    type: string
+                type: object
+              cvssVector:
+                type: string
+              phase:
+                description: SecurityReportPhase is where a report is in handling.
+                enum:
+                - Received
+                - Triaged
+                - Fixing
+                - Fixed
+                - Disclosed
+                - NotApplicable
+                - Duplicate
+                type: string
+              reason:
+                description: Reason is shown to the reporter for NotApplicable and
+                  Duplicate.
+                type: string
+              reward:
+                description: SecurityReward records how the reporter was thanked.
+                properties:
+                  amount:
+                    description: Amount is the credit amount, for kind credits.
+                    type: string
+                  creditGrantRef:
+                    description: CreditGrantRef names the billing CreditGrant, for
+                      kind credits.
+                    properties:
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  grantedAt:
+                    format: date-time
+                    type: string
+                  kind:
+                    description: RewardKind is how a reporter is thanked.
+                    enum:
+                    - none
+                    - thanks
+                    - swag
+                    - credits
+                    type: string
+                required:
+                - kind
+                type: object
+              severity:
+                description: Severity is the Security Team's rating.
+                enum:
+                - critical
+                - high
+                - medium
+                - low
+                - informational
+                type: string
+              timeline:
+                description: Timeline is visible to the reporter.
+                items:
+                  description: SecurityTimelineEntry is one phase change.
+                  properties:
+                    at:
+                      format: date-time
+                      type: string
+                    note:
+                      type: string
+                    phase:
+                      description: SecurityReportPhase is where a report is in handling.
+                      enum:
+                      - Received
+                      - Triaged
+                      - Fixing
+                      - Fixed
+                      - Disclosed
+                      - NotApplicable
+                      - Duplicate
+                      type: string
+                  required:
+                  - at
+                  - phase
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+            type: object
+        required:
+        - spec
+        type: object
+    selectableFields:
+    - jsonPath: .spec.userRef.name
+    - jsonPath: .status.phase
+    - jsonPath: .status.severity
+    served: true
+    storage: true
+    subresources:
+      status: {}

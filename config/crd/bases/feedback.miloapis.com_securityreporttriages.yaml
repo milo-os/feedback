@@ -1,0 +1,71 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+    discovery.miloapis.com/parent-contexts: Platform
+  name: securityreporttriages.feedback.miloapis.com
+spec:
+  group: feedback.miloapis.com
+  names:
+    kind: SecurityReportTriage
+    listKind: SecurityReportTriageList
+    plural: securityreporttriages
+    singular: securityreporttriage
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.assignee
+      name: Assignee
+      type: string
+    - jsonPath: .spec.duplicateOf
+      name: Duplicate of
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          SecurityReportTriage is the Security Team's private notes on a report,
+          with the same name as the report. Only the Security Team can read or write
+          it, so nothing here reaches the reporter.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SecurityReportTriageSpec is Security Team only.
+            properties:
+              assignee:
+                type: string
+              duplicateOf:
+                description: DuplicateOf is the name of the original report.
+                type: string
+              notes:
+                type: string
+              tracking:
+                description: Tracking links the private issue or draft advisory for
+                  the fix.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}
