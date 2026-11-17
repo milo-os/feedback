@@ -100,6 +100,12 @@ GET  /{submissions|securityreports}/{name}/attachments/{ref}             (staff)
   - A `Fixed` or `Disclosed` report with public credit gets a `SecurityAcknowledgement` with the name, link, month and severity. It's deleted if that stops being true.
 - **`move-to-security` reconciler:** carries out `MoveToSecurity` review decisions. It creates a report owned by the submitter and named after the submission, copies the attachments, then deletes the submission, which takes its review and files with it.
 
+## Audit and activity
+
+Milo audits feedback writes like any other CRD. Its audit policy (in `datum-cloud/infra`) logs feedback writes at `RequestResponse`, so search can index posts from the audit log. It logs `submissions`, `submissionreviews`, `securityreports`, `securityreporttriages` and `feedbackdigests`, with their subresources, at `Metadata` only: private context and vulnerability details never reach the audit log, activity or search.
+
+`config/milo/activity` holds an `ActivityPolicy` per kind, so people's actions read as sentences in activity timelines: voting, following, sending feedback or a report, staff decisions, hiding posts and editing sources. The service's own components are `system:` users and are left out. `test/config` compiles every rule and checks that rules for metadata-only kinds never read request or response bodies.
+
 ## Roles
 
 | Role | For |
@@ -130,8 +136,9 @@ config/crd/               generated CRDs, installed in Milo
 config/base/              operator and uploads Deployments, Services, leader election RBAC
 config/components/        milo-integration: Milo kubeconfig, client and webhook certificates
 config/milo/              applied to Milo: IAM (iam/), RBAC for the service's
-                          components (rbac/), webhook config (webhook/), and
-                          optional role bindings (bindings/)
+                          components (rbac/), webhook config (webhook/),
+                          activity rules (activity/), and optional role
+                          bindings (bindings/)
 config/samples/           an example of every resource
 test/config/              checks config/ against the CRDs
 ```

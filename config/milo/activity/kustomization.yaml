@@ -1,0 +1,17 @@
+# ActivityPolicies: how feedback writes read in activity timelines. Only
+# people's actions appear; the service's own components are system: users.
+# Kinds logged at Metadata (submissions, reviews, security reports, triage)
+# have rules that use only the verb and object reference.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - votes.yaml
+  - subscriptions.yaml
+  - submissions.yaml
+  - submissionreviews.yaml
+  - securityreports.yaml
+  - securityreporttriages.yaml
+  - posts.yaml
+  - feedbacksources.yaml
+  - feedbackprofiles.yaml

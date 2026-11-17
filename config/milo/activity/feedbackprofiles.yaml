@@ -1,0 +1,13 @@
+# A user's feedback settings.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: feedback.miloapis.com-feedbackprofiles
+spec:
+  resource:
+    apiGroup: feedback.miloapis.com
+    kind: FeedbackProfile
+  auditRules:
+    - name: update
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['create', 'update', 'patch'] && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated their feedback settings"

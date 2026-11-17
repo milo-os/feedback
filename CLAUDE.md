@@ -31,9 +31,11 @@ datum-cloud/enhancements#943.
   `feedback-sync`. The operator owns post `votes` and `delivery`; both use
   server-side apply with their own field manager. Staff can only patch
   `spec.hidden` on posts.
-- `Submission`, `SubmissionReview`, `SecurityReport` and
-  `SecurityReportTriage` are audited at `Metadata` only (a Milo audit policy
-  rule). Security reports are never indexed, synced or sent to the AI gateway.
+- `Submission`, `SubmissionReview`, `SecurityReport`, `SecurityReportTriage`
+  and `FeedbackDigest` are audited at `Metadata` only (a rule in Milo's audit
+  policy in datum-cloud/infra), so their activity rules can't read request or
+  response bodies. Security reports are never indexed, synced or sent to the
+  AI gateway.
 
 ## Commands
 

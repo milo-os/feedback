@@ -1,0 +1,17 @@
+# Follows are logged in full. Follows the operator creates when someone
+# votes or their submission is decided are system: actors and don't appear.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: feedback.miloapis.com-subscriptions
+spec:
+  resource:
+    apiGroup: feedback.miloapis.com
+    kind: Subscription
+  auditRules:
+    - name: follow
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.requestObject.spec) && has(audit.requestObject.spec.postRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} followed {{ link(audit.requestObject.spec.postRef.name, {'apiGroup': 'feedback.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'posts', 'name': audit.requestObject.spec.postRef.name}) }}"
+    - name: unfollow
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseObject.spec) && has(audit.responseObject.spec.postRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} stopped following {{ link(audit.responseObject.spec.postRef.name, {'apiGroup': 'feedback.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'posts', 'name': audit.responseObject.spec.postRef.name}) }}"
