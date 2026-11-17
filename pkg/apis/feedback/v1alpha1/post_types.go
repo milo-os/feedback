@@ -145,7 +145,36 @@ type PostStatus struct {
 	// LastSyncedAt is when feedback-sync last wrote this post.
 	// +optional
 	LastSyncedAt *metav1.Time `json:"lastSyncedAt,omitempty"`
+	// Conditions are written by the operator. A merged post carries
+	// VotesMoved: whether its votes and follows reached the post at the end
+	// of its merge chain, and if not, why. Posts are public, so messages
+	// never say a post is hidden.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
+
+// Post conditions and their reasons.
+const (
+	// PostConditionVotesMoved is set on a post with status.mergedInto. True
+	// means its votes and follows were moved to the post at the end of the
+	// merge chain, named in the message. False means they stay on this post
+	// until the chain leads somewhere they can go; the reason says why.
+	PostConditionVotesMoved = "VotesMoved"
+
+	// PostReasonMoved: the votes and follows were moved.
+	PostReasonMoved = "Moved"
+	// PostReasonTargetUnavailable: the chain ends at a post that doesn't
+	// exist or that people can't see. They move once it is available.
+	PostReasonTargetUnavailable = "TargetUnavailable"
+	// PostReasonMergeCycle: the chain loops back on itself. They move once
+	// feedback-sync breaks the loop.
+	PostReasonMergeCycle = "MergeCycle"
+	// PostReasonMergeChainTooLong: the chain is longer than the operator
+	// follows. They move once it is shorter.
+	PostReasonMergeChainTooLong = "MergeChainTooLong"
+)
 
 // GitHubIssue identifies the issue backing a post.
 type GitHubIssue struct {

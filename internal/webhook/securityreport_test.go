@@ -9,7 +9,9 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
+	"go.miloapis.com/feedback/internal/identity"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
@@ -97,5 +99,44 @@ func TestSecurityTimeline(t *testing.T) {
 	patched(t, req, resp, &got)
 	if l := got.Status.Timeline; len(l) != 2 || l[1].Phase != v1.SecurityReportPhaseFixing || !l[1].At.Time.Equal(now) {
 		t.Errorf("timeline %+v", l)
+	}
+}
+
+func TestSecurityReportMovedFrom(t *testing.T) {
+	staff := authenticationv1.UserInfo{Username: "sec@datum.net"}
+	operator := authenticationv1.UserInfo{Username: identity.OperatorUser}
+	report := func(annotations map[string]string) *v1.SecurityReport {
+		r := &v1.SecurityReport{Spec: v1.SecurityReportSpec{UserRef: &v1.UserReference{Name: "u1"}, Title: "t", Description: "d"}}
+		r.Annotations = annotations
+		return r
+	}
+	moved := map[string]string{v1.MovedFromSubmissionAnnotation: "s", v1.MovedFromSubmissionUIDAnnotation: "uid-1"}
+	for _, tc := range []struct {
+		name     string
+		op       admissionv1.Operation
+		user     authenticationv1.UserInfo
+		obj, old *v1.SecurityReport
+		allowed  bool
+	}{
+		{"the operator moving a submission", admissionv1.Create, operator, report(moved), nil, true},
+		{"anyone else naming a submission", admissionv1.Create, staff, report(moved), nil, false},
+		{"anyone else naming just a UID", admissionv1.Create, staff,
+			report(map[string]string{v1.MovedFromSubmissionUIDAnnotation: "uid-1"}), nil, false},
+		{"a report with other annotations", admissionv1.Create, staff, report(map[string]string{"x": "y"}), nil, true},
+		{"an update that keeps them", admissionv1.Update, staff, report(map[string]string{v1.MovedFromSubmissionAnnotation: "s",
+			v1.MovedFromSubmissionUIDAnnotation: "uid-1", "x": "y"}), report(moved), true},
+		{"an update that adds them", admissionv1.Update, staff, report(moved), report(nil), false},
+		{"an update that changes the UID", admissionv1.Update, operator, report(map[string]string{v1.MovedFromSubmissionAnnotation: "s",
+			v1.MovedFromSubmissionUIDAnnotation: "uid-2"}), report(moved), false},
+		{"an update that removes them", admissionv1.Update, staff, report(nil), report(moved), false},
+	} {
+		var old runtime.Object
+		if tc.old != nil {
+			old = tc.old
+		}
+		resp := SecurityReportCheck{}.Handle(context.Background(), request(t, tc.op, "securityreports", tc.user, tc.obj, old))
+		if resp.Allowed != tc.allowed {
+			t.Errorf("%s: allowed %v, want %v: %v", tc.name, resp.Allowed, tc.allowed, resp.Result)
+		}
 	}
 }

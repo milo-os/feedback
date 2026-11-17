@@ -2,13 +2,16 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -517,35 +520,55 @@ func TestSecurityReports(t *testing.T) {
 		}
 	})
 
-	t.Run("a misfiled submission moves to the security track", func(t *testing.T) {
+	// submit creates a submission by u7 with an attachment and waits for the
+	// operator to copy the file under it.
+	submit := func(t *testing.T, name string) (*v1.Submission, string) {
+		t.Helper()
 		ref, _, err := files.Upload(ctx, attachments.Submission, "u7", "poc.txt", "text/plain", []byte("poc"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		sub := &v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: "sub-sec"}, Spec: v1.SubmissionSpec{
+		sub := &v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: name}, Spec: v1.SubmissionSpec{
 			UserRef: v1.UserReference{Name: "u7"}, Kind: v1.SubmissionKindBug, Title: "Viewer reads secrets", Body: "steps",
 			Attachments: []v1.AttachmentReference{{UploadRef: ref}}}}
 		if err := c.Create(ctx, sub); err != nil {
 			t.Fatal(err)
 		}
-		eventually(t, "decide", func() error {
-			r := &v1.SubmissionReview{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}
-			if err := get(r); err != nil {
+		eventually(t, "submission's files copied", func() error {
+			if err := get(sub); err != nil {
 				return err
 			}
-			if err := get(sub); err != nil || len(sub.Finalizers) == 0 {
-				return errorf("submission's files not copied yet")
+			if len(sub.Finalizers) == 0 {
+				return errorf("no finalizer")
+			}
+			return nil
+		})
+		return sub, ref
+	}
+	decide := func(t *testing.T, sub *v1.Submission) *v1.SubmissionReview {
+		t.Helper()
+		r := &v1.SubmissionReview{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}
+		eventually(t, "decide", func() error {
+			if err := get(r); err != nil {
+				return err
 			}
 			r.Spec = v1.SubmissionReviewSpec{Decision: v1.ReviewDecisionMoveToSecurity, Affected: "secrets"}
 			return c.Update(ctx, r)
 		})
-		rep := &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}
+		return r
+	}
+	// moved waits for sub to become the report rep, with its file.
+	moved := func(t *testing.T, sub *v1.Submission, ref string, rep *v1.SecurityReport) {
+		t.Helper()
 		eventually(t, "moved", func() error {
 			if err := get(rep); err != nil {
 				return err
 			}
 			if rep.Spec.UserRef == nil || rep.Spec.UserRef.Name != "u7" || rep.Spec.Affected != "secrets" {
 				return errorf("report spec")
+			}
+			if !movedFrom(rep, sub) {
+				return errorf("report doesn't name the submission")
 			}
 			if err := get(&v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}); !apierrors.IsNotFound(err) {
 				return errorf("submission still there")
@@ -556,5 +579,120 @@ func TestSecurityReports(t *testing.T) {
 			_, err := files.Get(ctx, attachments.SecurityReport, rep.Name, "", ref)
 			return err
 		})
+	}
+
+	t.Run("a misfiled submission moves to the security track", func(t *testing.T) {
+		sub, ref := submit(t, "sub-sec")
+		// A report filed under the submission's own name is someone else's
+		// and is left alone.
+		other := &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}, Spec: v1.SecurityReportSpec{
+			UserRef: &v1.UserReference{Name: "u8"}, Title: "other", Description: "d"}}
+		if err := c.Create(ctx, other); err != nil {
+			t.Fatal(err)
+		}
+		decide(t, sub)
+		moved(t, sub, ref, &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: v1.MovedReportName(sub.Name, sub.UID)}})
+		if err := get(other); err != nil || other.Spec.Title != "other" {
+			t.Errorf("the other report changed: %v", err)
+		}
 	})
+
+	t.Run("a move finishes when its report already exists", func(t *testing.T) {
+		// As if the operator stopped after creating the report.
+		sub, ref := submit(t, "sub-sec-retry")
+		rep := movedReport(sub, &v1.SubmissionReview{Spec: v1.SubmissionReviewSpec{Affected: "secrets"}}, v1.MovedReportName(sub.Name, sub.UID))
+		if err := c.Create(ctx, rep); err != nil {
+			t.Fatal(err)
+		}
+		decide(t, sub)
+		moved(t, sub, ref, rep)
+	})
+
+	for _, tc := range []struct {
+		name  string
+		taken func(sub *v1.Submission) *v1.SecurityReport
+	}{
+		{"an unrelated report", func(sub *v1.Submission) *v1.SecurityReport {
+			return &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: v1.MovedReportName(sub.Name, sub.UID)},
+				Spec: v1.SecurityReportSpec{UserRef: &v1.UserReference{Name: "u8"}, Title: "other", Description: "d"}}
+		}},
+		{"a report naming the submission, for someone else", func(sub *v1.Submission) *v1.SecurityReport {
+			rep := movedReport(sub, &v1.SubmissionReview{}, v1.MovedReportName(sub.Name, sub.UID))
+			rep.Spec.UserRef.Name = "u8"
+			rep.Finalizers = nil
+			return rep
+		}},
+		{"a report naming another submission with the same name", func(sub *v1.Submission) *v1.SecurityReport {
+			rep := movedReport(sub, &v1.SubmissionReview{}, v1.MovedReportName(sub.Name, sub.UID))
+			rep.Annotations[v1.MovedFromSubmissionUIDAnnotation] = "00000000-0000-0000-0000-000000000000"
+			rep.Finalizers = nil
+			return rep
+		}},
+	} {
+		t.Run("a move is refused when "+tc.name+" has the name", func(t *testing.T) {
+			sub, ref := submit(t, fmt.Sprintf("sub-sec-taken-%d", time.Now().UnixNano()))
+			taken := tc.taken(sub)
+			if err := c.Create(ctx, taken); err != nil {
+				t.Fatal(err)
+			}
+			before := taken.DeepCopy()
+			review := decide(t, sub)
+			eventually(t, "refused", func() error {
+				if err := get(review); err != nil {
+					return err
+				}
+				cond := meta.FindStatusCondition(review.Status.Conditions, ConditionApplied)
+				if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != ReasonReportNameTaken {
+					return errorf("no ReportNameTaken condition")
+				}
+				return nil
+			})
+			// Give a wrong move time to happen.
+			time.Sleep(time.Second)
+			if err := get(&v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}); err != nil {
+				t.Fatalf("submission: %v", err)
+			}
+			if _, err := files.Get(ctx, attachments.Submission, sub.Name, "", ref); err != nil {
+				t.Errorf("submission's file: %v", err)
+			}
+			if _, err := files.Get(ctx, attachments.SecurityReport, taken.Name, "", ref); err == nil {
+				t.Errorf("file copied to the other report")
+			}
+			if err := get(taken); err != nil || taken.UID != before.UID || !reflect.DeepEqual(taken.Spec, before.Spec) {
+				t.Errorf("the other report changed: %v", err)
+			}
+
+			// Once that report is gone, the move goes ahead.
+			if err := c.Delete(ctx, taken); err != nil {
+				t.Fatal(err)
+			}
+			moved(t, sub, ref, &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: taken.Name}})
+		})
+	}
+}
+
+func TestMovedFrom(t *testing.T) {
+	sub := &v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: "s", UID: "uid-1"}, Spec: v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}}}
+	for _, tc := range []struct {
+		name string
+		edit func(*v1.SecurityReport)
+		want bool
+	}{
+		{"made from it", func(*v1.SecurityReport) {}, true},
+		{"no annotations", func(r *v1.SecurityReport) { r.Annotations = nil }, false},
+		{"another submission's name", func(r *v1.SecurityReport) { r.Annotations[v1.MovedFromSubmissionAnnotation] = "t" }, false},
+		{"another submission's UID", func(r *v1.SecurityReport) { r.Annotations[v1.MovedFromSubmissionUIDAnnotation] = "uid-2" }, false},
+		{"another owner", func(r *v1.SecurityReport) { r.Spec.UserRef.Name = "u2" }, false},
+		{"no owner", func(r *v1.SecurityReport) { r.Spec.UserRef = nil }, false},
+	} {
+		rep := movedReport(sub, &v1.SubmissionReview{}, v1.MovedReportName(sub.Name, sub.UID))
+		tc.edit(rep)
+		if got := movedFrom(rep, sub); got != tc.want {
+			t.Errorf("%s: movedFrom = %v", tc.name, got)
+		}
+	}
+	if movedFrom(&v1.SecurityReport{Spec: v1.SecurityReportSpec{UserRef: &v1.UserReference{Name: "u1"}}},
+		&v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: ""}, Spec: v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}}}) {
+		t.Error("a submission without a UID matched a report without annotations")
+	}
 }
