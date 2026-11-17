@@ -111,7 +111,7 @@ func (r *SubmissionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //     name; then the submitter follows (reason submitted) and votes, and the
 //     submission links to the post.
 //
-// MoveToSecurity is carried out by the security report reconciler.
+// MoveToSecurity is carried out by MoveReconciler.
 // status.applied is set once a decision is fully carried out.
 type ReviewReconciler struct {
 	client.Client

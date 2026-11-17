@@ -446,3 +446,115 @@ func TestSubmissionAttachments(t *testing.T) {
 		return nil
 	})
 }
+
+func TestSecurityReports(t *testing.T) {
+	ctx := context.Background()
+	files, err := attachments.Open(ctx, "mem://")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := start(t, &clock{now: time.Now()}, files)
+	get := func(obj client.Object) error { return c.Get(ctx, client.ObjectKeyFromObject(obj), obj) }
+
+	t.Run("a new report is received, with private triage", func(t *testing.T) {
+		rep := &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: "sec-1"}, Spec: v1.SecurityReportSpec{
+			UserRef: &v1.UserReference{Name: "u1"}, Title: "t", Description: "d",
+			Credit: &v1.SecurityCredit{Public: true, Name: "Ada L.", URL: "https://example.com"}}}
+		if err := c.Create(ctx, rep); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "received", func() error {
+			if err := get(rep); err != nil {
+				return err
+			}
+			if rep.Status.Phase != v1.SecurityReportPhaseReceived || len(rep.Status.Timeline) != 1 {
+				return errorf("status " + string(rep.Status.Phase))
+			}
+			return get(&v1.SecurityReportTriage{ObjectMeta: metav1.ObjectMeta{Name: "sec-1"}})
+		})
+
+		// Fixed, with public credit: acknowledged.
+		rep.Status.Phase, rep.Status.Severity = v1.SecurityReportPhaseFixed, v1.SeverityHigh
+		rep.Status.Timeline = append(rep.Status.Timeline, v1.SecurityTimelineEntry{
+			Phase: v1.SecurityReportPhaseFixed, At: metav1.NewTime(time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC))})
+		if err := c.Status().Update(ctx, rep); err != nil {
+			t.Fatal(err)
+		}
+		ack := &v1.SecurityAcknowledgement{ObjectMeta: metav1.ObjectMeta{Name: "sec-1"}}
+		eventually(t, "acknowledged", func() error {
+			if err := get(ack); err != nil {
+				return err
+			}
+			if ack.Status.Name != "Ada L." || ack.Status.Month != "2026-10" || ack.Status.Severity != v1.SeverityHigh {
+				return errorf("ack " + ack.Status.Month)
+			}
+			return nil
+		})
+	})
+
+	t.Run("no public credit, no acknowledgement", func(t *testing.T) {
+		rep := &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: "sec-2"}, Spec: v1.SecurityReportSpec{
+			Reporter: &v1.ExternalReporter{Email: "r@example.com"}, Title: "t", Description: "d"}}
+		if err := c.Create(ctx, rep); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "received", func() error {
+			if err := get(rep); err != nil {
+				return err
+			}
+			if rep.Status.Phase == "" {
+				return errorf("no phase")
+			}
+			return nil
+		})
+		rep.Status.Phase = v1.SecurityReportPhaseDisclosed
+		if err := c.Status().Update(ctx, rep); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Second)
+		if err := get(&v1.SecurityAcknowledgement{ObjectMeta: metav1.ObjectMeta{Name: "sec-2"}}); !apierrors.IsNotFound(err) {
+			t.Errorf("acknowledgement exists: %v", err)
+		}
+	})
+
+	t.Run("a misfiled submission moves to the security track", func(t *testing.T) {
+		ref, _, err := files.Upload(ctx, attachments.Submission, "u7", "poc.txt", "text/plain", []byte("poc"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sub := &v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: "sub-sec"}, Spec: v1.SubmissionSpec{
+			UserRef: v1.UserReference{Name: "u7"}, Kind: v1.SubmissionKindBug, Title: "Viewer reads secrets", Body: "steps",
+			Attachments: []v1.AttachmentReference{{UploadRef: ref}}}}
+		if err := c.Create(ctx, sub); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "decide", func() error {
+			r := &v1.SubmissionReview{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}
+			if err := get(r); err != nil {
+				return err
+			}
+			if err := get(sub); err != nil || len(sub.Finalizers) == 0 {
+				return errorf("submission's files not copied yet")
+			}
+			r.Spec = v1.SubmissionReviewSpec{Decision: v1.ReviewDecisionMoveToSecurity, Affected: "secrets"}
+			return c.Update(ctx, r)
+		})
+		rep := &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}
+		eventually(t, "moved", func() error {
+			if err := get(rep); err != nil {
+				return err
+			}
+			if rep.Spec.UserRef == nil || rep.Spec.UserRef.Name != "u7" || rep.Spec.Affected != "secrets" {
+				return errorf("report spec")
+			}
+			if err := get(&v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}); !apierrors.IsNotFound(err) {
+				return errorf("submission still there")
+			}
+			if _, err := files.Get(ctx, attachments.Submission, sub.Name, "", ref); err == nil {
+				return errorf("submission's copy not deleted")
+			}
+			_, err := files.Get(ctx, attachments.SecurityReport, rep.Name, "", ref)
+			return err
+		})
+	})
+}

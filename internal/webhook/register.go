@@ -32,4 +32,6 @@ func Register(mgr manager.Manager, o Options) {
 		Submissions: c, Limit: o.SubmissionLimit, Window: o.SubmissionWindow,
 	}})
 	s.Register("/validate-submissionreview", &webhook.Admission{Handler: ReviewCheck{Posts: c}})
+	s.Register("/validate-securityreport", &webhook.Admission{Handler: SecurityReportCheck{}})
+	s.Register("/mutate-securityreport-status", &webhook.Admission{Handler: SecurityTimeline{}})
 }

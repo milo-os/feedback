@@ -47,6 +47,8 @@ func Setup(ctx context.Context, mgr ctrl.Manager, o Options) error {
 		&MergeReconciler{Client: c},
 		&SubmissionReconciler{Client: c, Files: o.Files},
 		&ReviewReconciler{Client: c},
+		&SecurityReportReconciler{Client: c, Options: o},
+		&MoveReconciler{Client: c, Options: o},
 	} {
 		if err := r.SetupWithManager(mgr); err != nil {
 			return err
