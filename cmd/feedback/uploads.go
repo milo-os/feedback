@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"net/http"
 	"time"
@@ -49,6 +50,9 @@ func newUploadsCommand() *cobra.Command {
 	f.IntVar(&o.burst, "uploads-burst", 10, "Uploads a user may make at once.")
 	f.IntVar(&o.maxUploads, "max-concurrent-uploads", uploads.DefaultMaxUploads, "Uploads one replica handles at once; more get 503 with Retry-After. Each can hold up to twice --attachment-max-size, plus about 16 MiB of bucket client buffers, so lower this if you raise that. 0 disables the cap.")
 	f.IntVar(&o.maxDownloads, "max-concurrent-downloads", uploads.DefaultMaxDownloads, "Downloads one replica streams at once; more get 503 with Retry-After. 0 disables the cap.")
+	goFlags := flag.NewFlagSet("zap", flag.ExitOnError)
+	zapOpts.BindFlags(goFlags)
+	f.AddGoFlagSet(goFlags)
 	return cmd
 }
 
