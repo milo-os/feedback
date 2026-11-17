@@ -1,0 +1,17 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: PolicyBinding
+metadata:
+  name: feedback-staff-reviewer-feedbacksources
+  namespace: milo-system
+spec:
+  roleRef:
+    name: feedback.miloapis.com-reviewer
+    namespace: milo-system
+  subjects:
+    - kind: Group
+      name: staff-users
+      namespace: milo-system
+  resourceSelector:
+    resourceKind:
+      apiGroup: feedback.miloapis.com
+      kind: FeedbackSource

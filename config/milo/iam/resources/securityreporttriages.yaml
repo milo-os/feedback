@@ -1,0 +1,18 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: feedback.miloapis.com-securityreporttriages
+spec:
+  serviceRef:
+    name: "feedback.miloapis.com"
+  kind: SecurityReportTriage
+  plural: securityreporttriages
+  singular: securityreporttriage
+  permissions:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete

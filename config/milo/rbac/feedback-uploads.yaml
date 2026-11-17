@@ -1,0 +1,50 @@
+# feedback-uploads stores attachments. It checks the caller with TokenReview
+# and SubjectAccessReview (granted separately below) and reads submissions and
+# reports to find which files they reference.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: feedback.miloapis.com:uploads
+rules:
+  - apiGroups: [feedback.miloapis.com]
+    resources: [submissions, securityreports]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: feedback.miloapis.com:uploads
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: feedback.miloapis.com:uploads
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:feedback-uploads@feedback.miloapis.com
+---
+# Authenticating and authorizing callers on Milo's behalf.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: feedback.miloapis.com:uploads-reviews
+rules:
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+  - apiGroups: [authorization.k8s.io]
+    resources: [subjectaccessreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: feedback.miloapis.com:uploads-reviews
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: feedback.miloapis.com:uploads-reviews
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: system:feedback-uploads@feedback.miloapis.com

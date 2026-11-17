@@ -1,0 +1,24 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: feedback.miloapis.com-submissionreviews
+spec:
+  serviceRef:
+    name: "feedback.miloapis.com"
+  kind: SubmissionReview
+  plural: submissionreviews
+  singular: submissionreview
+  subresources:
+    - name: status
+      permissions:
+        - get
+        - update
+        - patch
+  permissions:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete

@@ -1,0 +1,33 @@
+# posts/hidden isn't served. Milo asks whether the caller may get it before
+# showing hidden posts (iam.miloapis.com/hidden-field on the CRD). Grant it to
+# staff and the service's own components only.
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: feedback.miloapis.com-posts
+spec:
+  serviceRef:
+    name: "feedback.miloapis.com"
+  kind: Post
+  plural: posts
+  singular: post
+  subresources:
+    - name: status
+      permissions:
+        - get
+        - update
+        - patch
+    - name: hidden
+      permissions:
+        - get
+  permissions:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+  parentResources:
+    - apiGroup: iam.miloapis.com
+      kind: User

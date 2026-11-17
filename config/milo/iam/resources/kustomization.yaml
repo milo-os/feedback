@@ -3,3 +3,15 @@ kind: Component
 
 resources:
   - feedbacksources.yaml
+  - posts.yaml
+  - releases.yaml
+  - changelogentries.yaml
+  - votes.yaml
+  - subscriptions.yaml
+  - submissions.yaml
+  - submissionreviews.yaml
+  - securityreports.yaml
+  - securityreporttriages.yaml
+  - securityacknowledgements.yaml
+  - feedbackprofiles.yaml
+  - feedbackdigests.yaml
