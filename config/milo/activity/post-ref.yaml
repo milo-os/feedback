@@ -1,0 +1,41 @@
+# Names the post in the audit event when someone removes a vote or stops
+# following a post, so the activity rules in votes.yaml and subscriptions.yaml
+# can say which post it was.
+#
+# A delete's audit event has no object body: the API server answers a custom
+# resource delete with a Status (name, group, resource and UID only) and the
+# request body, if any, is DeleteOptions. The name is <post>.<user>, but the
+# activity service's CEL has no string functions to split it. Admission sees
+# the object being deleted (oldObject), and an audit annotation from a
+# ValidatingAdmissionPolicy is recorded at every audit level as
+# "post-ref.feedback.miloapis.com/post".
+#
+# The policy has no validations, so it never refuses a delete, and it runs in
+# the API server, so there is no webhook to be unavailable. With
+# failurePolicy Ignore, an evaluation error leaves the annotation out and the
+# activity entry falls back to not naming the post.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: post-ref.feedback.miloapis.com
+spec:
+  failurePolicy: Ignore
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["feedback.miloapis.com"]
+        apiVersions: ["*"]
+        operations: ["DELETE"]
+        resources: ["votes", "subscriptions"]
+  auditAnnotations:
+    - key: post
+      valueExpression: "string(oldObject.spec.postRef.name)"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: post-ref.feedback.miloapis.com
+spec:
+  policyName: post-ref.feedback.miloapis.com
+  # There are no validations to act on; audit annotations are recorded
+  # whatever the actions are.
+  validationActions: ["Audit"]

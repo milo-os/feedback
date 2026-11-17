@@ -49,6 +49,11 @@ spec:
             configMapKeyRef:
               name: feedback-config
               key: attachments-bucket
+        # A soft limit under the container's 256Mi, so the GC works harder
+        # before the kernel kills the process. The transfer caps keep live
+        # memory under it; see DefaultMaxUploads in internal/uploads.
+        - name: GOMEMLIMIT
+          value: 220MiB
         ports:
         - containerPort: 8080
           name: http

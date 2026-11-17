@@ -9,6 +9,10 @@ import (
 	"testing"
 
 	"github.com/google/cel-go/cel"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
+	structuraldefaulting "k8s.io/apiextensions-apiserver/pkg/apiserver/schema/defaulting"
 	sigsyaml "sigs.k8s.io/yaml"
 
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
@@ -125,9 +129,11 @@ func TestSearchPolicies(t *testing.T) {
 	}
 }
 
-// TestHiddenPostCondition evaluates the posts policy's condition the way the
-// indexer does: metadata, spec and status as dynamic variables.
-func TestHiddenPostCondition(t *testing.T) {
+// postCondition compiles the posts policy's condition in the environment
+// the search indexer uses: metadata, spec and status as dynamic variables
+// (milo-os/search internal/cel NewEnv).
+func postCondition(t *testing.T) cel.Program {
+	t.Helper()
 	var cond string
 	for _, p := range loadIndexPolicies(t) {
 		if p.Spec.TargetResource.Kind == "Post" {
@@ -149,20 +155,90 @@ func TestHiddenPostCondition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return prg
+}
+
+// indexed evaluates the condition the way the indexer does
+// (internal/policy/evaluation CachedPolicy.Evaluate): only the top-level
+// keys the object has are bound, and an evaluation error counts as no match.
+func indexed(prg cel.Program, obj map[string]any) (bool, error) {
+	activation := map[string]any{}
+	for _, k := range []string{"metadata", "spec", "status"} {
+		if v, ok := obj[k]; ok {
+			activation[k] = v
+		}
+	}
+	out, _, err := prg.Eval(activation)
+	if err != nil {
+		return false, err
+	}
+	v, _ := out.Value().(bool)
+	return v, nil
+}
+
+// postDefaulter applies the Post CRD's schema defaults to a raw object, as
+// Milo does to every Post it stores and returns, and so to the audit event
+// the indexer reads.
+func postDefaulter(t *testing.T) func(map[string]any) {
+	t.Helper()
+	data, err := os.ReadFile("../../config/crd/bases/feedback.miloapis.com_posts.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var crd apiextensionsv1.CustomResourceDefinition
+	if err := sigsyaml.Unmarshal(data, &crd); err != nil {
+		t.Fatal(err)
+	}
+	var internal apiextensions.JSONSchemaProps
+	if err := apiextensionsv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(crd.Spec.Versions[0].Schema.OpenAPIV3Schema, &internal, nil); err != nil {
+		t.Fatal(err)
+	}
+	s, err := structuralschema.NewStructural(&internal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return func(obj map[string]any) { structuraldefaulting.Default(obj, s) }
+}
+
+// TestHiddenPostCondition checks which posts the indexer keeps, starting from
+// raw objects as a client could create them, including one with no spec key.
+// The indexer can't evaluate spec.hidden without a spec, so a post with none
+// is indexed only because the CRD defaults spec to {}.
+func TestHiddenPostCondition(t *testing.T) {
+	prg := postCondition(t)
+	defaults := postDefaulter(t)
 	for _, c := range []struct {
-		hidden bool
-		want   bool
-	}{{false, true}, {true, false}} {
-		p := v1.Post{Spec: v1.PostSpec{Hidden: c.hidden}}
-		raw, _ := json.Marshal(p)
+		name string
+		raw  string
+		want bool
+	}{
+		{"no spec", `{"metadata":{"name":"a.b.1"},"status":{"title":"t"}}`, true},
+		{"empty spec", `{"metadata":{"name":"a.b.2"},"spec":{}}`, true},
+		{"visible", `{"metadata":{"name":"a.b.3"},"spec":{"hidden":false}}`, true},
+		{"hidden", `{"metadata":{"name":"a.b.4"},"spec":{"hidden":true}}`, false},
+	} {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(c.raw), &obj); err != nil {
+			t.Fatal(err)
+		}
+		defaults(obj)
+		got, err := indexed(prg, obj)
+		if err != nil {
+			t.Errorf("%s: %v (as served: %v)", c.name, err, obj)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("%s: indexed=%v, want %v", c.name, got, c.want)
+		}
+	}
+
+	// Typed clients always send a spec; check they agree.
+	for _, hidden := range []bool{false, true} {
+		raw, _ := json.Marshal(v1.Post{Spec: v1.PostSpec{Hidden: hidden}})
 		var obj map[string]any
 		_ = json.Unmarshal(raw, &obj)
-		out, _, err := prg.Eval(map[string]any{"metadata": obj["metadata"], "spec": obj["spec"], "status": obj["status"]})
-		if err != nil {
-			t.Fatalf("hidden=%v: %v", c.hidden, err)
-		}
-		if out.Value() != c.want {
-			t.Errorf("hidden=%v: indexed=%v, want %v", c.hidden, out.Value(), c.want)
+		if got, err := indexed(prg, obj); err != nil || got == hidden {
+			t.Errorf("typed post hidden=%v: indexed=%v, err=%v", hidden, got, err)
 		}
 	}
 }

@@ -82,6 +82,7 @@ GET  /{submissions|securityreports}/{name}/attachments/{ref}             (staff)
 - **Checking the caller.** A Milo `TokenReview` identifies the caller. A `SubjectAccessReview` checks that they may create (to upload) or get (to download) that resource in the context the path names. In a user's context, the service also checks that the object is theirs.
 - **Files accepted.** Files are type-checked against their content: PNG, JPEG, GIF, WebP, PDF, text and JSON only. The size limit is 10 MiB by default, and each user gets a per-minute upload limit.
 - **Storage.** Files land under `uploads/<purpose>/<user>/` in the bucket.
+- **Limits per replica.** Downloads stream from the bucket. Each upload is buffered, up to the size limit, to check its type. `--max-concurrent-uploads` (default 4) and `--max-concurrent-downloads` (default 32) cap transfers on one replica; past them it answers 503 with `Retry-After`. Each transfer gets a deadline sized for its file, at 64 KiB/s plus 30 seconds.
 - **Attaching.** The `attachments` mutating webhook checks every `uploadRef` on a new submission or report is the owner's upload for that purpose, and sets its name and type from the upload.
 - **Keeping and deleting.** The operator copies attached files under `submissions/<name>/` as soon as the submission exists, and adds the `feedback.miloapis.com/attachments` finalizer. Deleting the submission deletes its files.
 - **Lifecycle rule.** The bucket's lifecycle rule should delete `uploads/` after a day.
@@ -98,24 +99,49 @@ GET  /{submissions|securityreports}/{name}/attachments/{ref}             (staff)
   - It creates the report's `SecurityReportTriage` for the Security Team's private notes.
   - It copies attachments under `security-reports/<name>/` and deletes them with the report.
   - A `Fixed` or `Disclosed` report with public credit gets a `SecurityAcknowledgement` with the name, link, month and severity. It's deleted if that stops being true.
-- **`move-to-security` reconciler:** carries out `MoveToSecurity` review decisions. It creates a report owned by the submitter and named after the submission, copies the attachments, then deletes the submission, which takes its review and files with it.
+- **`move-to-security` reconciler:** carries out `MoveToSecurity` review decisions. It creates a report owned by the submitter, named `<submission>-<submission UID>` and annotated with the submission's name and UID (`feedback.miloapis.com/moved-from-submission`, `-uid`). It reads the report back and checks the name, UID and owner before it copies the attachments and deletes the submission, which takes its review and files with it. If a report it didn't create already has that name, it keeps the submission and its files and sets `Applied=False` with reason `ReportNameTaken` on the review; the move is tried again when a report is deleted. Only the operator can set the moved-from annotations, and they can't change.
 
 ## Audit and activity
 
 Milo audits feedback writes like any other CRD. Its audit policy (in `datum-cloud/infra`) logs feedback writes at `RequestResponse`, so search can index posts from the audit log. It logs `submissions`, `submissionreviews`, `securityreports`, `securityreporttriages` and `feedbackdigests`, with their subresources, at `Metadata` only: private context and vulnerability details never reach the audit log, activity or search.
 
-`config/milo/activity` holds an `ActivityPolicy` per kind, so people's actions read as sentences in activity timelines: voting, following, sending feedback or a report, staff decisions, hiding posts and editing sources. The service's own components are `system:` users and are left out. `test/config` compiles every rule and checks that rules for metadata-only kinds never read request or response bodies.
+`config/milo/activity` holds an `ActivityPolicy` per kind, so people's actions read as sentences in activity timelines: voting, following, sending feedback, staff decisions, hiding posts and editing sources. The service's own components are `system:` users and are left out. A delete's audit event carries a `Status`, not the deleted object, so a `ValidatingAdmissionPolicy` (`post-ref.yaml`) adds the post's name to vote and subscription deletes as the audit annotation `post-ref.feedback.miloapis.com/post`, and the unvote and unfollow rules read it there. Security reports and their triage have no `ActivityPolicy`: the activity service shows every entry to anyone who can read the platform timeline, with no per-entry access check, so an entry would reveal that a report exists. `test/config` compiles every rule in the activity service's CEL environment, checks that rules never read bodies a metadata-only kind or a delete won't have, renders delete events written by an envtest API server, and checks no policy covers security reports.
 
 ## Search
 
 `config/milo/search` has a `ResourceIndexPolicy` for `Post`, `Release` and `ChangelogEntry`.
 
 - **What's searchable:** title, summary or body, categories, labels and state. Derived fields (`votes`, `trendingScore`, `delivery`) aren't indexed, since they change as side effects and would go stale.
-- **Hidden posts:** the policy's condition leaves them out, and hiding a post removes it from the index.
-- **How clients use it:** a `ResourceSearchQuery` for keyword search, and for similar posts while someone writes feedback.
+- **Hidden posts:** the policy's condition leaves them out, and hiding a post removes it from the index. The condition reads `spec.hidden`, and the indexer can't evaluate it on an object with no `spec` (it logs an error and treats the post as not matching, which also deletes it from the index), so the `Post` CRD defaults `spec` to `{}`.
 - **Never indexed:** submissions, reviews, security reports, votes and follows.
 - **What it relies on:** the indexer reads objects from Milo's audit log, so it needs Milo to log feedback writes at `RequestResponse` (see Audit and activity).
-- **Measuring lag:** `hack/search-lag.sh <post>` measures how long a post change takes to reach the index. Run it against staging; it hides the post briefly.
+- **Measuring lag:** `hack/search-lag.sh <post>` measures how long a post change takes to reach the index. Run it against staging with a platform-root kubeconfig; it hides a visible post briefly and always puts back its original `spec.hidden`.
+
+### Who can search posts
+
+The search service filters every `ResourceSearchQuery` by the caller's Milo context, taken from the `iam.miloapis.com/parent-type` and `parent-name` user extras (`internal/registry/resourcesearchquery` in `milo-os/search`):
+
+- **Platform root** (no parent context): no filter. The query sees every indexed document from every tenant.
+- **User, organization or project control plane**: only documents indexed from that same user, organization or project.
+
+feedback-sync and the operator write posts, releases and changelog entries at the platform root, so they're indexed as platform documents. **Only platform-root queries find them.** A query in a user, organization or project context returns no posts and no error. That rules out the cloud portal's user-context calls and `datumctl` in an org or project context.
+
+Similar posts and keyword search therefore run on a server, at the platform root:
+
+| Caller | How it searches posts |
+| --- | --- |
+| datum.net | its server's service account, at the platform root |
+| feedback-operator (submission triage) | its own identity, at the platform root |
+| cloud portal | its server, with a platform service account like the one behind its post cache; not with the user's token in the user context |
+| `datumctl`, Patch | can't query with the user's credentials; they need a server-side call (a feedback endpoint or `feedback-mcp`), not built yet |
+
+The caller needs `search.miloapis.com/resourcesearchqueries.create` at the platform root (search's `search.miloapis.com-searcher` role). That isn't limited to feedback: search doesn't check access per object or per kind, and a platform-root query with no `targetResources` searches every index across every tenant. So:
+
+- Never grant it to end users.
+- Always set `targetResources` to the feedback kinds, and never pass through targets or tenant filters a client supplies.
+- Don't filter on the result's tenant. Milo marks root requests as scope `global`, so posts indexed from the audit log carry tenant type `Global` while a reindex stores `platform`.
+
+Nothing in `config/milo` grants this yet. `hack/search-scope.sh` checks the behavior above against a real environment.
 
 ## Roles
 
@@ -152,6 +178,7 @@ config/milo/              applied to Milo: IAM (iam/), RBAC for the service's
                           (search/), and optional role bindings (bindings/)
 config/samples/           an example of every resource
 hack/search-lag.sh        measures how long a post change takes to reach search
+hack/search-scope.sh      checks which Milo contexts can find a post in search
 test/config/              checks config/ against the CRDs
 test/e2e/                 Chainsaw end-to-end tests in kind (see End-to-end tests)
 hack/e2e/                 deploys the end-to-end environment
