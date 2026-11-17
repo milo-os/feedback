@@ -35,7 +35,12 @@ datum-cloud/enhancements#943.
   and `FeedbackDigest` are audited at `Metadata` only (a rule in Milo's audit
   policy in datum-cloud/infra), so their activity rules can't read request or
   response bodies. Security reports are never indexed, synced or sent to the
-  AI gateway.
+  AI gateway, and have no ActivityPolicy: platform-timeline readers see every
+  activity entry, whoever made it.
+- A delete's audit event has a `Status` response, never the object. Activity
+  rules for deletes use `objectRef` or an audit annotation (see
+  `config/milo/activity/post-ref.yaml`); the activity service's CEL has no
+  string functions, so names can't be split.
 
 ## Commands
 

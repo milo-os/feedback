@@ -1,0 +1,71 @@
+{
+  "annotations": {
+    "authorization.k8s.io/decision": "allow",
+    "authorization.k8s.io/reason": "",
+    "post-ref.feedback.miloapis.com/post": "datum-cloud.enhancements.912"
+  },
+  "apiVersion": "audit.k8s.io/v1",
+  "auditID": "ff5e6b43-f1bb-4699-9213-8b3808558241",
+  "kind": "Event",
+  "level": "RequestResponse",
+  "objectRef": {
+    "apiGroup": "feedback.miloapis.com",
+    "apiVersion": "v1alpha1",
+    "name": "datum-cloud.enhancements.912.312983457298312345",
+    "resource": "subscriptions"
+  },
+  "requestObject": {
+    "apiVersion": "meta.k8s.io/__internal",
+    "kind": "DeleteOptions"
+  },
+  "requestReceivedTimestamp": "2026-11-17T21:41:44.923712Z",
+  "requestURI": "/apis/feedback.miloapis.com/v1alpha1/subscriptions/datum-cloud.enhancements.912.312983457298312345",
+  "responseObject": {
+    "apiVersion": "v1",
+    "details": {
+      "group": "feedback.miloapis.com",
+      "kind": "subscriptions",
+      "name": "datum-cloud.enhancements.912.312983457298312345",
+      "uid": "b07b6034-b036-4738-866f-7b0ce3590c18"
+    },
+    "kind": "Status",
+    "metadata": {},
+    "status": "Success"
+  },
+  "responseStatus": {
+    "code": 200,
+    "details": {
+      "group": "feedback.miloapis.com",
+      "kind": "subscriptions",
+      "name": "datum-cloud.enhancements.912.312983457298312345",
+      "uid": "b07b6034-b036-4738-866f-7b0ce3590c18"
+    },
+    "metadata": {},
+    "status": "Success"
+  },
+  "sourceIPs": [
+    "10.0.0.12"
+  ],
+  "stage": "ResponseComplete",
+  "stageTimestamp": "2026-11-17T21:41:44.924673Z",
+  "user": {
+    "username": "alice@example.com",
+    "uid": "312983457298312345",
+    "groups": [
+      "system:authenticated"
+    ],
+    "extra": {
+      "iam.miloapis.com/parent-api-group": [
+        "iam.miloapis.com"
+      ],
+      "iam.miloapis.com/parent-type": [
+        "User"
+      ],
+      "iam.miloapis.com/parent-name": [
+        "312983457298312345"
+      ]
+    }
+  },
+  "userAgent": "feedback-website",
+  "verb": "delete"
+}
