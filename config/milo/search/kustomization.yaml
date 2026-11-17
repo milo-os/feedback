@@ -1,9 +1,10 @@
-# Search index policies for Milo's search service. Clients search posts by
-# keyword and look for similar posts while someone writes feedback; feedback
-# is also findable through platform search. The indexer reads objects from
-# the audit log, so these need Milo to log feedback writes at
-# RequestResponse. Submissions, reviews, security reports, votes and
-# follows are never indexed.
+# Search index policies for Milo's search service, for keyword search and
+# similar posts while someone writes feedback. Everything here is indexed as
+# a platform document, so only queries at Milo's platform root find it:
+# servers search on clients' behalf (see "Who can search posts" in
+# README.md). The indexer reads objects from the audit log, so these need
+# Milo to log feedback writes at RequestResponse. Submissions, reviews,
+# security reports, votes and follows are never indexed.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 

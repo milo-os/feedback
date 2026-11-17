@@ -111,11 +111,36 @@ Milo audits feedback writes like any other CRD. Its audit policy (in `datum-clou
 `config/milo/search` has a `ResourceIndexPolicy` for `Post`, `Release` and `ChangelogEntry`.
 
 - **What's searchable:** title, summary or body, categories, labels and state. Derived fields (`votes`, `trendingScore`, `delivery`) aren't indexed, since they change as side effects and would go stale.
-- **Hidden posts:** the policy's condition leaves them out, and hiding a post removes it from the index.
-- **How clients use it:** a `ResourceSearchQuery` for keyword search, and for similar posts while someone writes feedback.
+- **Hidden posts:** the policy's condition leaves them out, and hiding a post removes it from the index. The condition reads `spec.hidden`, and the indexer can't evaluate it on an object with no `spec` (it logs an error and treats the post as not matching, which also deletes it from the index), so the `Post` CRD defaults `spec` to `{}`.
 - **Never indexed:** submissions, reviews, security reports, votes and follows.
 - **What it relies on:** the indexer reads objects from Milo's audit log, so it needs Milo to log feedback writes at `RequestResponse` (see Audit and activity).
-- **Measuring lag:** `hack/search-lag.sh <post>` measures how long a post change takes to reach the index. Run it against staging; it hides the post briefly.
+- **Measuring lag:** `hack/search-lag.sh <post>` measures how long a post change takes to reach the index. Run it against staging with a platform-root kubeconfig; it hides a visible post briefly and always puts back its original `spec.hidden`.
+
+### Who can search posts
+
+The search service filters every `ResourceSearchQuery` by the caller's Milo context, taken from the `iam.miloapis.com/parent-type` and `parent-name` user extras (`internal/registry/resourcesearchquery` in `milo-os/search`):
+
+- **Platform root** (no parent context): no filter. The query sees every indexed document from every tenant.
+- **User, organization or project control plane**: only documents indexed from that same user, organization or project.
+
+feedback-sync and the operator write posts, releases and changelog entries at the platform root, so they're indexed as platform documents. **Only platform-root queries find them.** A query in a user, organization or project context returns no posts and no error. That rules out the cloud portal's user-context calls and `datumctl` in an org or project context.
+
+Similar posts and keyword search therefore run on a server, at the platform root:
+
+| Caller | How it searches posts |
+| --- | --- |
+| datum.net | its server's service account, at the platform root |
+| feedback-operator (submission triage) | its own identity, at the platform root |
+| cloud portal | its server, with a platform service account like the one behind its post cache; not with the user's token in the user context |
+| `datumctl`, Patch | can't query with the user's credentials; they need a server-side call (a feedback endpoint or `feedback-mcp`), not built yet |
+
+The caller needs `search.miloapis.com/resourcesearchqueries.create` at the platform root (search's `search.miloapis.com-searcher` role). That isn't limited to feedback: search doesn't check access per object or per kind, and a platform-root query with no `targetResources` searches every index across every tenant. So:
+
+- Never grant it to end users.
+- Always set `targetResources` to the feedback kinds, and never pass through targets or tenant filters a client supplies.
+- Don't filter on the result's tenant. Milo marks root requests as scope `global`, so posts indexed from the audit log carry tenant type `Global` while a reindex stores `platform`.
+
+Nothing in `config/milo` grants this yet. `hack/search-scope.sh` checks the behavior above against a real environment.
 
 ## Roles
 
@@ -152,6 +177,7 @@ config/milo/              applied to Milo: IAM (iam/), RBAC for the service's
                           (search/), and optional role bindings (bindings/)
 config/samples/           an example of every resource
 hack/search-lag.sh        measures how long a post change takes to reach search
+hack/search-scope.sh      checks which Milo contexts can find a post in search
 test/config/              checks config/ against the CRDs
 ```
 

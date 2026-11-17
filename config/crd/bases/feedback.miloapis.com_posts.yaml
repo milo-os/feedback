@@ -69,7 +69,10 @@ spec:
           metadata:
             type: object
           spec:
-            description: PostSpec holds the fields staff control.
+            default: {}
+            description: |-
+              Spec holds the fields staff control. It defaults to {} so every post
+              has one, which the search index condition on spec.hidden needs.
             properties:
               hidden:
                 description: Hidden removes the post from every client and from search.

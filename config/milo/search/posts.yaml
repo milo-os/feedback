@@ -3,6 +3,15 @@
 # votes, trendingScore and delivery change as side effects and would go
 # stale, so they aren't. Hidden posts are left out, and hiding a post
 # removes it from the index.
+#
+# The indexer binds metadata, spec and status only when the object has
+# them, and a condition that can't be evaluated counts as no match. has()
+# can't test for a missing spec, so the Post CRD defaults spec to {}.
+#
+# Posts are written at Milo's platform root, so they're indexed as platform
+# documents and only platform-root ResourceSearchQueries find them; user,
+# organization and project contexts get nothing. See "Who can search posts"
+# in README.md.
 apiVersion: search.miloapis.com/v1alpha1
 kind: ResourceIndexPolicy
 metadata:
