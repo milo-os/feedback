@@ -19,6 +19,8 @@ const (
 	// FromSubmission indexes posts by the submission they were created from
 	// (v1alpha1.FromSubmissionAnnotation).
 	FromSubmission = "metadata.annotations.fromSubmission"
+	// MergedInto indexes posts by status.mergedInto.
+	MergedInto = "status.mergedInto"
 )
 
 // Add registers every index with mgr. Call it once, before mgr starts.
@@ -32,6 +34,12 @@ func Add(ctx context.Context, mgr manager.Manager) error {
 		{&v1.Vote{}, Post, func(o client.Object) []string { return []string{o.(*v1.Vote).Spec.PostRef.Name} }},
 		{&v1.Subscription{}, Post, func(o client.Object) []string { return []string{o.(*v1.Subscription).Spec.PostRef.Name} }},
 		{&v1.Submission{}, Owner, func(o client.Object) []string { return []string{o.(*v1.Submission).Spec.UserRef.Name} }},
+		{&v1.Post{}, MergedInto, func(o client.Object) []string {
+			if into := o.(*v1.Post).Status.MergedInto; into != "" {
+				return []string{into}
+			}
+			return nil
+		}},
 		{&v1.Post{}, FromSubmission, func(o client.Object) []string {
 			if s := o.GetAnnotations()[v1.FromSubmissionAnnotation]; s != "" {
 				return []string{s}
