@@ -306,6 +306,11 @@ const (
 	CategoryLabelPrefix = "category.feedback.miloapis.com/"
 )
 
+// FromSubmissionAnnotation is set by feedback-sync on a post it created from
+// an approved submission, naming the submission. The operator uses it to link
+// the submission to its post and to give the submitter a vote.
+const FromSubmissionAnnotation = "feedback.miloapis.com/submission"
+
 // PostName is the name of the Post for a GitHub issue:
 // "<org>.<repository>.<number>", lower-cased.
 func PostName(org, repository string, number int32) string {

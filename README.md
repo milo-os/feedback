@@ -17,8 +17,8 @@ webhooks.
 ## Status
 
 The CRDs are defined. The operator sets owners and reviewers in admission,
-and reconciles votes and follows. Submissions, security reports and
-attachments are tracked as sub-issues of the epic.
+and reconciles votes, follows and submission reviews. Attachments, triage,
+security reports and digests are tracked as sub-issues of the epic.
 
 | Resource | Who writes it | Who reads it |
 | --- | --- | --- |
@@ -58,6 +58,16 @@ decided on a `SubmissionReview`.
 - **`post-votes` reconciler.** It counts a post's votes from the cache (indexed by `spec.postRef.name`) and applies `status.votes.{total,datum,linked,trendingScore}` with server-side apply as `feedback-operator`. `github` and `githubReactions` belong to `feedback-sync`. `total = datum + github - linked`, where `linked` counts people whose 👍 comes from the GitHub account linked to their vote. Posts with a trending score are re-tallied hourly as votes age.
 - **`merge` reconciler.** When `status.mergedInto` is set, it gives each voter and follower the same on the target post, unless they already have one, and deletes the old one.
 
+## Submissions
+
+- **Admission** (`submission` webhook): the sender's email must be verified, and each user can send at most `--submission-limit` (default 5) per `--submission-window` (default 10 minutes), counted from the cache. A `Merged` review decision must name a post that exists, isn't hidden and isn't merged (`submissionreview` webhook).
+- **`submission` reconciler.** It creates each submission's `SubmissionReview`, owned by the submission so Milo's garbage collector deletes it with the submission, and sets the phase to `PendingReview`.
+- **`submission-review` reconciler.** It carries out the staff decision:
+  - `Rejected` copies the reason to the submission.
+  - `Merged` has the submitter follow (`reason: merged`) and vote on the post.
+  - `Approved` waits until feedback-sync creates the GitHub issue and syncs a post annotated `feedback.miloapis.com/submission: <name>`. It then links the submission to that post and has the submitter follow (`reason: submitted`) and vote.
+  - The `Applied` condition and `status.applied` record when the decision has been fully carried out.
+
 ## Roles
 
 | Role | For |
@@ -77,6 +87,7 @@ client certificates and get Kubernetes RBAC in Milo (`config/milo/rbac`).
 cmd/feedback/             operator and version commands
 internal/controller/      reconcilers
 internal/identity/        who a request comes from, from Milo's user info
+internal/index/           cache field indexes shared by reconcilers and webhooks
 internal/milo/            voter lookups in Milo
 internal/webhook/         admission webhooks Milo calls
 pkg/apis/feedback/        feedback.miloapis.com/v1alpha1 types (CRDs)

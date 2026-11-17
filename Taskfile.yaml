@@ -43,6 +43,9 @@ tasks:
       - "{{.TOOL_DIR}}/controller-gen object:headerFile=hack/boilerplate.go.txt paths=./pkg/apis/..."
       - "{{.TOOL_DIR}}/controller-gen crd paths=./pkg/apis/... output:crd:artifacts:config=config/crd/bases"
       - "{{.TOOL_DIR}}/controller-gen webhook paths=./internal/webhook/... output:webhook:artifacts:config=config/milo/webhook"
+      # controller-gen always names the kubebuilder placeholder Service.
+      - |
+        perl -pi -e 's/^(      name: )webhook-service$/${1}feedback-operator-webhook/; s/^(      namespace: )system$/${1}feedback-system/' config/milo/webhook/manifests.yaml
 
   install-tools:
     desc: Install code generators into bin/

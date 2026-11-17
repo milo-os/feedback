@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"go.miloapis.com/feedback/internal/index"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
@@ -36,7 +37,7 @@ func (r *MergeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	var votes v1.VoteList
-	if err := r.List(ctx, &votes, client.MatchingFields{postIndex: post.Name}); err != nil {
+	if err := r.List(ctx, &votes, client.MatchingFields{index.Post: post.Name}); err != nil {
 		return ctrl.Result{}, err
 	}
 	for i := range votes.Items {
@@ -51,7 +52,7 @@ func (r *MergeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	var subs v1.SubscriptionList
-	if err := r.List(ctx, &subs, client.MatchingFields{postIndex: post.Name}); err != nil {
+	if err := r.List(ctx, &subs, client.MatchingFields{index.Post: post.Name}); err != nil {
 		return ctrl.Result{}, err
 	}
 	for i := range subs.Items {

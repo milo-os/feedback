@@ -11,17 +11,12 @@ import (
 	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"go.miloapis.com/feedback/internal/milo"
-	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
 // FieldManager is the operator's server-side apply field manager.
 const FieldManager = "feedback-operator"
-
-// postIndex indexes votes and subscriptions by spec.postRef.name.
-const postIndex = "spec.postRef.name"
 
 // Options configures the reconcilers.
 type Options struct {
@@ -39,24 +34,16 @@ func (o Options) now() time.Time {
 	return time.Now()
 }
 
-// Setup adds the field indexes and every reconciler to mgr.
+// Setup adds every reconciler to mgr. The indexes in package index must be
+// added first.
 func Setup(ctx context.Context, mgr ctrl.Manager, o Options) error {
-	idx := mgr.GetFieldIndexer()
-	if err := idx.IndexField(ctx, &v1.Vote{}, postIndex, func(obj client.Object) []string {
-		return []string{obj.(*v1.Vote).Spec.PostRef.Name}
-	}); err != nil {
-		return err
-	}
-	if err := idx.IndexField(ctx, &v1.Subscription{}, postIndex, func(obj client.Object) []string {
-		return []string{obj.(*v1.Subscription).Spec.PostRef.Name}
-	}); err != nil {
-		return err
-	}
 	c := mgr.GetClient()
 	for _, r := range []interface{ SetupWithManager(ctrl.Manager) error }{
 		&PostVotesReconciler{Client: c, Options: o},
 		&VoteReconciler{Client: c, Options: o},
 		&MergeReconciler{Client: c},
+		&SubmissionReconciler{Client: c},
+		&ReviewReconciler{Client: c},
 	} {
 		if err := r.SetupWithManager(mgr); err != nil {
 			return err

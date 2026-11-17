@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"go.miloapis.com/feedback/internal/index"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
@@ -33,7 +34,7 @@ func (r *PostVotesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	var votes v1.VoteList
-	if err := r.List(ctx, &votes, client.MatchingFields{postIndex: post.Name}); err != nil {
+	if err := r.List(ctx, &votes, client.MatchingFields{index.Post: post.Name}); err != nil {
 		return ctrl.Result{}, err
 	}
 	voters := make([]voter, 0, len(votes.Items))

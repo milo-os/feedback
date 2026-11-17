@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"go.miloapis.com/feedback/internal/index"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
@@ -135,7 +136,7 @@ func (r *VoteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *VoteReconciler) votesOf(ctx context.Context, post client.Object) []reconcile.Request {
 	var votes v1.VoteList
-	if err := r.List(ctx, &votes, client.MatchingFields{postIndex: post.GetName()}); err != nil {
+	if err := r.List(ctx, &votes, client.MatchingFields{index.Post: post.GetName()}); err != nil {
 		log.FromContext(ctx).Error(err, "Listing a post's votes failed", "post", post.GetName())
 		return nil
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,6 +18,7 @@ import (
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"go.miloapis.com/feedback/internal/controller"
+	"go.miloapis.com/feedback/internal/index"
 	"go.miloapis.com/feedback/internal/milo"
 	"go.miloapis.com/feedback/internal/version"
 	"go.miloapis.com/feedback/internal/webhook"
@@ -38,6 +40,8 @@ type operatorOptions struct {
 	leaderElectionNamespace string
 	webhookPort             int
 	webhookCertDir          string
+	submissionLimit         int
+	submissionWindow        time.Duration
 }
 
 func newOperatorCommand() *cobra.Command {
@@ -59,6 +63,8 @@ func newOperatorCommand() *cobra.Command {
 	f.StringVar(&o.leaderElectionNamespace, "leader-election-namespace", "feedback-system", "Namespace of the leader election lease.")
 	f.IntVar(&o.webhookPort, "webhook-port", 9443, "Port the admission webhook server listens on.")
 	f.StringVar(&o.webhookCertDir, "webhook-cert-dir", "/etc/kubernetes/pki/webhook", "Directory holding tls.crt and tls.key for the webhook server.")
+	f.IntVar(&o.submissionLimit, "submission-limit", 5, "Submissions a user may send per --submission-window; 0 disables the limit.")
+	f.DurationVar(&o.submissionWindow, "submission-window", 10*time.Minute, "Window for --submission-limit.")
 	goFlags := flag.NewFlagSet("zap", flag.ExitOnError)
 	zapOpts.BindFlags(goFlags)
 	f.AddGoFlagSet(goFlags)
@@ -95,13 +101,16 @@ func runOperator(o operatorOptions) error {
 		return fmt.Errorf("creating manager: %w", err)
 	}
 
-	webhook.Register(mgr)
+	ctx := ctrl.SetupSignalHandler()
+	if err := index.Add(ctx, mgr); err != nil {
+		return fmt.Errorf("adding indexes: %w", err)
+	}
+	webhook.Register(mgr, webhook.Options{SubmissionLimit: o.submissionLimit, SubmissionWindow: o.submissionWindow})
 
 	users, err := milo.NewClient(miloConfig)
 	if err != nil {
 		return fmt.Errorf("creating Milo user client: %w", err)
 	}
-	ctx := ctrl.SetupSignalHandler()
 	if err := controller.Setup(ctx, mgr, controller.Options{Users: users}); err != nil {
 		return fmt.Errorf("setting up controllers: %w", err)
 	}

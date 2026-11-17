@@ -8,8 +8,8 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: feedback-operator-webhook
+      namespace: feedback-system
       path: /mutate-owner
   failurePolicy: Fail
   name: owner.feedback.miloapis.com
@@ -31,8 +31,8 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: feedback-operator-webhook
+      namespace: feedback-system
       path: /mutate-submissionreview
   failurePolicy: Fail
   name: reviewer.feedback.miloapis.com
@@ -57,8 +57,47 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
-      namespace: system
+      name: feedback-operator-webhook
+      namespace: feedback-system
+      path: /validate-submission
+  failurePolicy: Fail
+  name: submission.feedback.miloapis.com
+  rules:
+  - apiGroups:
+    - feedback.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - submissions
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: feedback-operator-webhook
+      namespace: feedback-system
+      path: /validate-submissionreview
+  failurePolicy: Fail
+  name: submissionreview.feedback.miloapis.com
+  rules:
+  - apiGroups:
+    - feedback.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - submissionreviews
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: feedback-operator-webhook
+      namespace: feedback-system
       path: /validate-vote
   failurePolicy: Fail
   name: vote.feedback.miloapis.com
