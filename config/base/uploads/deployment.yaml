@@ -41,8 +41,9 @@ spec:
         - --attachments-bucket=$(ATTACHMENTS_BUCKET)
         - --zap-encoder=json
         env:
-        # The environment sets the bucket, e.g. gs://feedback-attachments-staging.
-        # Its lifecycle rule should delete uploads/ objects after one day.
+        # The environment sets the bucket, e.g. gs://feedback-attachments-staging
+        # or an S3-compatible store with the s3-attachments component. Its
+        # lifecycle rule should delete uploads/ objects after one day.
         - name: ATTACHMENTS_BUCKET
           valueFrom:
             configMapKeyRef:

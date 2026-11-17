@@ -1,0 +1,53 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# s3-attachments gives the operator and feedback-uploads credentials for an
+# attachments bucket on Amazon S3 or an S3-compatible store (Cloudflare R2,
+# MinIO, Ceph and others), from the feedback-attachments-s3 Secret in the
+# feedback-system namespace:
+#
+#   AWS_ACCESS_KEY_ID:     the store's access key
+#   AWS_SECRET_ACCESS_KEY: its secret key
+#
+# The key needs read, write, list and delete on the bucket. Set
+# attachments-bucket in the feedback-config ConfigMap to the bucket URL, e.g.
+#
+#   s3://feedback-attachments?endpoint=https://ACCOUNT.r2.cloudflarestorage.com&region=auto&use_path_style=true
+#
+# Add request_checksum_calculation=when_required if the store rejects the AWS
+# SDK's default checksums. Give the bucket a lifecycle rule that deletes
+# objects under uploads/ after one day.
+
+patches:
+  - target:
+      kind: Deployment
+      name: feedback-operator
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: feedback-operator
+      spec:
+        template:
+          spec:
+            containers:
+              - name: operator
+                envFrom:
+                  - secretRef:
+                      name: feedback-attachments-s3
+  - target:
+      kind: Deployment
+      name: feedback-uploads
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: feedback-uploads
+      spec:
+        template:
+          spec:
+            containers:
+              - name: uploads
+                envFrom:
+                  - secretRef:
+                      name: feedback-attachments-s3

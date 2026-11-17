@@ -31,8 +31,9 @@ import (
 
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob" // file:// for local development
-	_ "gocloud.dev/blob/gcsblob"  // gs:// in clusters
+	_ "gocloud.dev/blob/gcsblob"  // gs:// for Google Cloud Storage
 	_ "gocloud.dev/blob/memblob"  // mem:// for tests
+	_ "gocloud.dev/blob/s3blob"   // s3:// for Amazon S3 and S3-compatible stores
 	"gocloud.dev/gcerrors"
 
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
@@ -78,8 +79,19 @@ type Store struct {
 	MaxSize int
 }
 
-// Open opens the bucket at url, e.g. gs://feedback-attachments, file:///tmp/a
-// or mem://.
+// Open opens the bucket at bucketURL:
+//
+//   - gs://BUCKET for Google Cloud Storage, with the workload's credentials.
+//   - s3://BUCKET?region=REGION for Amazon S3.
+//   - s3://BUCKET?endpoint=https://HOST&region=REGION&use_path_style=true for
+//     an S3-compatible store (Cloudflare R2, MinIO, Ceph and others). Add
+//     request_checksum_calculation=when_required for stores that reject the
+//     AWS SDK's default checksums.
+//   - file:///PATH for local development and mem:// for tests.
+//
+// S3 credentials come from the AWS SDK's usual sources, normally the
+// AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables. See
+// gocloud.dev/blob/s3blob and gocloud.dev/aws for every URL parameter.
 func Open(ctx context.Context, bucketURL string) (*Store, error) {
 	b, err := blob.OpenBucket(ctx, bucketURL)
 	if err != nil {

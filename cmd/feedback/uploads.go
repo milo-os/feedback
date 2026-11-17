@@ -41,7 +41,7 @@ func newUploadsCommand() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&o.miloKubeconfig, "milo-kubeconfig", "", "Kubeconfig for Milo. Empty uses the in-cluster config.")
 	f.StringVar(&o.addr, "listen-address", ":8080", "Address to serve HTTP on. TLS is terminated in front of the service.")
-	f.StringVar(&o.bucket, "attachments-bucket", "", "Bucket URL for attachments, e.g. gs://feedback-attachments or file:///tmp/attachments.")
+	f.StringVar(&o.bucket, "attachments-bucket", "", "Bucket URL for attachments: gs://BUCKET, s3://BUCKET?region=REGION, or s3://BUCKET?endpoint=URL&region=REGION&use_path_style=true for an S3-compatible store. file:///PATH for local development.")
 	f.IntVar(&o.maxSize, "attachment-max-size", attachments.DefaultMaxSize, "Largest file accepted, in bytes.")
 	f.Float64Var(&o.perMinute, "uploads-per-minute", 2, "Uploads a user may make per minute, on average; 0 disables the limit.")
 	f.IntVar(&o.burst, "uploads-burst", 10, "Uploads a user may make at once.")
