@@ -1,0 +1,54 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: rate-limit
+spec:
+  description: |
+    The submission limit: limit-user (its own user, so other tests' feedback
+    doesn't count) gets 5 submissions (the operator's default
+    --submission-limit) and then 429 Too Many Requests. The e2e overlay sets
+    --submission-window=30s; a run within 30s of the last one waits for the
+    window to pass first.
+  steps:
+    - name: limit
+      try:
+        - script:
+            shell: bash
+            timeout: 3m
+            content: |
+              . ../lib.sh
+              limit=5
+              send() {
+                call limit-user POST "$(url limit-user submissions)" \
+                  '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Submission","metadata":{"generateName":"e2e-limit-"},"spec":{"kind":"bug","title":"e2e rate limit","body":"Sent by the feedback e2e tests."}}'
+              }
+              code=$(send)
+              if [ "$code" = 429 ]; then
+                echo "limit-user is still limited from an earlier run; waiting out the window"
+                sleep 31
+                code=$(send)
+              fi
+              admitted=0
+              while [ "$code" = 201 ]; do
+                admitted=$((admitted + 1))
+                [ $admitted -le $limit ] || break
+                code=$(send)
+              done
+              [ "$code" = 429 ] || fail "after $admitted submissions: HTTP $code: $(cat $OUT)"
+              if [ $admitted != $limit ]; then
+                echo "429 response: $(cat $OUT)" >&2
+                echo "limit-user's submissions (created at):" >&2
+                milo get submissions.feedback.miloapis.com --field-selector spec.userRef.name=limit-user \
+                  -o custom-columns=NAME:.metadata.name,CREATED:.metadata.creationTimestamp >&2
+                fail "admitted $admitted submissions before 429, want $limit"
+              fi
+              [ "$(jqo .reason)" = TooManyRequests ] || fail "429 reason: $(cat $OUT)"
+              echo "ok: $admitted admitted, then 429: $(jqo .message)"
+              n=$(milo get submissions.feedback.miloapis.com --field-selector spec.userRef.name=limit-user -o json | jq '.items | length')
+              [ "$n" = $limit ] || fail "limit-user has $n submissions, want $limit"
+      cleanup:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              milo delete submissions.feedback.miloapis.com --field-selector spec.userRef.name=limit-user --ignore-not-found --wait=false
