@@ -1,0 +1,33 @@
+# Posts are found by their GitHub text, categories, labels and state. The
+# indexer keeps the whole object, but only these fields are searchable;
+# votes, trendingScore and delivery change as side effects and would go
+# stale, so they aren't. Hidden posts are left out, and hiding a post
+# removes it from the index.
+apiVersion: search.miloapis.com/v1alpha1
+kind: ResourceIndexPolicy
+metadata:
+  name: feedback-posts
+spec:
+  targetResource:
+    group: feedback.miloapis.com
+    version: v1alpha1
+    kind: Post
+  conditions:
+    - name: visible
+      expression: "!has(spec.hidden) || !spec.hidden"
+  fields:
+    - path: .metadata.name
+    - path: .status.title
+      searchable: true
+    - path: .status.summary
+      searchable: true
+    - path: .status.bodyHTML
+      searchable: true
+    - path: .status.categories[*]
+      searchable: true
+    - path: .status.labels[*]
+      searchable: true
+    - path: .status.state
+      searchable: true
+    - path: .status.github.org
+    - path: .status.github.repository

@@ -18,8 +18,8 @@ webhooks.
 
 The CRDs are defined. The operator sets owners and reviewers in admission,
 reconciles votes, follows, submission reviews and security reports, and
-stores attachments. Triage, notifications and digests, audit and search
-config are tracked as sub-issues of the epic.
+stores attachments. Activity and search are configured. Triage,
+notifications and digests are tracked as sub-issues of the epic.
 
 | Resource | Who writes it | Who reads it |
 | --- | --- | --- |
@@ -106,6 +106,17 @@ Milo audits feedback writes like any other CRD. Its audit policy (in `datum-clou
 
 `config/milo/activity` holds an `ActivityPolicy` per kind, so people's actions read as sentences in activity timelines: voting, following, sending feedback or a report, staff decisions, hiding posts and editing sources. The service's own components are `system:` users and are left out. `test/config` compiles every rule and checks that rules for metadata-only kinds never read request or response bodies.
 
+## Search
+
+`config/milo/search` has a `ResourceIndexPolicy` for `Post`, `Release` and `ChangelogEntry`.
+
+- **What's searchable:** title, summary or body, categories, labels and state. Derived fields (`votes`, `trendingScore`, `delivery`) aren't indexed, since they change as side effects and would go stale.
+- **Hidden posts:** the policy's condition leaves them out, and hiding a post removes it from the index.
+- **How clients use it:** a `ResourceSearchQuery` for keyword search, and for similar posts while someone writes feedback.
+- **Never indexed:** submissions, reviews, security reports, votes and follows.
+- **What it relies on:** the indexer reads objects from Milo's audit log, so it needs Milo to log feedback writes at `RequestResponse` (see Audit and activity).
+- **Measuring lag:** `hack/search-lag.sh <post>` measures how long a post change takes to reach the index. Run it against staging; it hides the post briefly.
+
 ## Roles
 
 | Role | For |
@@ -137,9 +148,10 @@ config/base/              operator and uploads Deployments, Services, leader ele
 config/components/        milo-integration: Milo kubeconfig, client and webhook certificates
 config/milo/              applied to Milo: IAM (iam/), RBAC for the service's
                           components (rbac/), webhook config (webhook/),
-                          activity rules (activity/), and optional role
-                          bindings (bindings/)
+                          activity rules (activity/), search index policies
+                          (search/), and optional role bindings (bindings/)
 config/samples/           an example of every resource
+hack/search-lag.sh        measures how long a post change takes to reach search
 test/config/              checks config/ against the CRDs
 ```
 

@@ -1,0 +1,18 @@
+apiVersion: search.miloapis.com/v1alpha1
+kind: ResourceIndexPolicy
+metadata:
+  name: feedback-changelogentries
+spec:
+  targetResource:
+    group: feedback.miloapis.com
+    version: v1alpha1
+    kind: ChangelogEntry
+  fields:
+    - path: .metadata.name
+    - path: .status.title
+      searchable: true
+    - path: .status.bodyHTML
+      searchable: true
+    - path: .status.categories[*]
+      searchable: true
+    - path: .status.publishedAt
