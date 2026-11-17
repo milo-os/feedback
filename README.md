@@ -72,6 +72,30 @@ docker run --rm -v "$PWD:/src" -v "$HOME/.milo:/milo:ro" -w /src golang:1.27 \
   go run ./cmd/feedback operator --milo-kubeconfig=/milo/kubeconfig --webhook-cert-dir=/tmp/certs
 ```
 
+## Before enabling for users
+
+These ship outside this repository and must be live in an environment before
+users can reach the feedback API there:
+
+1. **Audit policy.** Milo's audit policy logs `Submission`,
+   `SubmissionReview`, `SecurityReport`, `SecurityReportTriage` and
+   `FeedbackDigest` at `Metadata` only
+   ([datum-cloud/infra#9437](https://github.com/datum-cloud/infra/pull/9437)).
+   Without it, private submission and report content would be written to
+   audit logs.
+2. **Owner filtering in Milo**
+   ([milo-os/milo#1017](https://github.com/milo-os/milo/pull/1017)), released
+   to that Milo. Without it, a user listing votes or submissions would see
+   everyone's.
+3. **User and public-reader bindings.** The `feedback.miloapis.com-user` role
+   bound to every signed-in user in their own context (through Milo's
+   `iam-user-self-manage`), and `feedback.miloapis.com-public-reader` bound to
+   the datum.net service account. Without them, users and the website have no
+   access.
+4. **The operator is ready before its webhooks are registered.** The webhook
+   configurations fail closed, so apply them after the operator's readiness
+   check passes.
+
 ## License
 
 [AGPL-3.0](LICENSE)

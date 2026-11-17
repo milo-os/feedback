@@ -95,7 +95,11 @@ func runOperator(o operatorOptions) error {
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		return err
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	// Ready only once the webhook server answers TLS: Milo calls the
+	// admission webhooks with failurePolicy Fail, so a pod that took
+	// traffic before then would fail requests during rollouts.
+	// GetWebhookServer also registers the server with the manager.
+	if err := mgr.AddReadyzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
 		return err
 	}
 
