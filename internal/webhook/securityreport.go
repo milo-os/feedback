@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	"go.miloapis.com/feedback/internal/identity"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
@@ -27,9 +28,12 @@ var (
 // +kubebuilder:webhook:path=/validate-securityreport,mutating=false,failurePolicy=fail,sideEffects=None,groups=feedback.miloapis.com,resources=securityreports;securityreports/status,verbs=create;update,versions=v1alpha1,name=securityreport.feedback.miloapis.com,admissionReviewVersions=v1
 
 // SecurityReportCheck validates what the CRD schema can't: credit links,
-// external reporters' contact details, and the Security Team's status
-// updates. The timeline is the reporter's record, so entries can be added but
-// not changed or removed.
+// external reporters' contact details, the Security Team's status updates,
+// and the annotations naming the submission a report was moved from. The
+// timeline is the reporter's record, so entries can be added but not changed
+// or removed. Only the operator can set the moved-from annotations, when it
+// creates the report, and no one can change them: the operator trusts them
+// before it deletes the submission.
 type SecurityReportCheck struct{}
 
 var _ admission.Handler = SecurityReportCheck{}
@@ -44,17 +48,40 @@ func (SecurityReportCheck) Handle(_ context.Context, req admission.Request) admi
 	switch {
 	case req.Operation == admissionv1.Create:
 		errs = validateReportSpec(&r.Spec)
+		if identity.Of(req.UserInfo) != identity.Operator {
+			errs = append(errs, validateMovedFrom(r, &v1.SecurityReport{})...)
+		}
 	case req.SubResource == "status":
 		old := &v1.SecurityReport{}
 		if err := json.Unmarshal(req.OldObject.Raw, old); err != nil {
 			return admission.Errored(http.StatusBadRequest, err)
 		}
 		errs = validateReportStatus(&r.Status, &old.Status)
+	case req.Operation == admissionv1.Update:
+		old := &v1.SecurityReport{}
+		if err := json.Unmarshal(req.OldObject.Raw, old); err != nil {
+			return admission.Errored(http.StatusBadRequest, err)
+		}
+		errs = validateMovedFrom(r, old)
 	}
 	if len(errs) == 0 {
 		return admission.Allowed("")
 	}
 	return admission.Denied(apierrors.NewInvalid(v1.Kind("SecurityReport"), r.Name, errs).Error())
+}
+
+// validateMovedFrom refuses moved-from annotations that differ from old's.
+func validateMovedFrom(r, old *v1.SecurityReport) field.ErrorList {
+	p := field.NewPath("metadata", "annotations")
+	var errs field.ErrorList
+	for _, k := range []string{v1.MovedFromSubmissionAnnotation, v1.MovedFromSubmissionUIDAnnotation} {
+		v, has := r.Annotations[k]
+		was, had := old.Annotations[k]
+		if v != was || has != had {
+			errs = append(errs, field.Forbidden(p.Key(k), "set only by the operator, when it moves a submission to a report, and can't change"))
+		}
+	}
+	return errs
 }
 
 func validateReportSpec(s *v1.SecurityReportSpec) field.ErrorList {

@@ -1,7 +1,10 @@
 package v1alpha1
 
 import (
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // SecurityReportPhase is where a report is in handling.
@@ -193,6 +196,31 @@ type SecurityReward struct {
 // CreditGrantReference names a billing.miloapis.com CreditGrant.
 type CreditGrantReference struct {
 	Name string `json:"name"`
+}
+
+// Annotations the operator sets on a report it created from a submission
+// with a MoveToSecurity decision: the submission's name and UID. With
+// spec.userRef they tie the report to that one submission, so the operator
+// deletes the submission only once its own report exists. Only the operator
+// can set them, and they can't change.
+const (
+	MovedFromSubmissionAnnotation    = "feedback.miloapis.com/moved-from-submission"
+	MovedFromSubmissionUIDAnnotation = "feedback.miloapis.com/moved-from-submission-uid"
+)
+
+// maxNameLength is the longest name a cluster-scoped object can have.
+const maxNameLength = 253
+
+// MovedReportName is the name of the SecurityReport a submission moves to:
+// "<submission>-<submission UID>". It is the same on every retry, and a
+// report filed under the submission's own name can't take it. A long
+// submission name is shortened to fit.
+func MovedReportName(submission string, uid types.UID) string {
+	suffix := "-" + string(uid)
+	if len(submission)+len(suffix) > maxNameLength {
+		submission = strings.TrimRight(submission[:maxNameLength-len(suffix)], "-.")
+	}
+	return submission + suffix
 }
 
 // SecurityReportTriage is the Security Team's private notes on a report,
