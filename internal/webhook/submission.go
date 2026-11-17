@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -48,7 +49,8 @@ type SubmissionCheck struct {
 	Admitted *Admitted
 }
 
-// Admitted records when this replica admitted each user's submissions.
+// Admitted records when this replica admitted each user's submissions, so
+// SubmissionCheck can count the ones its cache doesn't show yet.
 type Admitted struct {
 	mu     sync.Mutex
 	byUser map[string][]time.Time
@@ -90,30 +92,23 @@ func (c SubmissionCheck) Handle(ctx context.Context, req admission.Request) admi
 	}
 	now := c.now()
 	since := now.Add(-c.Window)
-	var recent []time.Time
-	var newest time.Time
+	var recent, cached []time.Time
 	for _, s := range mine.Items {
 		t := s.CreationTimestamp.Time
 		if t.After(since) {
 			recent = append(recent, t)
-		}
-		if t.After(newest) {
-			newest = t
+			cached = append(cached, t)
 		}
 	}
 	if c.Admitted != nil {
-		// A submission is created after it is admitted, so an admission
-		// older than the newest submission in the cache has been counted.
-		var keep []time.Time
+		var local []time.Time
 		for _, t := range c.Admitted.byUser[owner] {
 			if t.After(since) {
-				keep = append(keep, t)
-				if t.After(newest) {
-					recent = append(recent, t)
-				}
+				local = append(local, t)
 			}
 		}
-		c.Admitted.byUser[owner] = keep
+		c.Admitted.byUser[owner] = local
+		recent = append(recent, unseen(local, cached)...)
 	}
 	if len(recent) < c.Limit {
 		if c.Admitted != nil {
@@ -121,18 +116,39 @@ func (c SubmissionCheck) Handle(ctx context.Context, req admission.Request) admi
 		}
 		return admission.Allowed("")
 	}
-	oldest := recent[0]
-	for _, t := range recent {
-		if t.Before(oldest) {
-			oldest = t
-		}
-	}
+	oldest := slices.MinFunc(recent, func(a, b time.Time) int { return a.Compare(b) })
 	wait := oldest.Add(c.Window).Sub(now).Round(time.Second)
 	resp := admission.Denied(fmt.Sprintf("You can send %d pieces of feedback every %s; try again in %s.",
 		c.Limit, duration.HumanDuration(c.Window), duration.HumanDuration(max(wait, time.Second))))
 	resp.Result.Code = http.StatusTooManyRequests
 	resp.Result.Reason = metav1.StatusReasonTooManyRequests
 	return resp
+}
+
+// unseen returns the admissions in local, oldest first, that the cache
+// doesn't show yet. Every submission this replica admitted is created after
+// its admission, so the cached submissions created since the oldest
+// admission account for that many of them. creationTimestamp has whole
+// seconds, so the comparison rounds the admission time down: an admission
+// and its submission in the same second must not both count. A submission
+// another replica created in that time also accounts for one, which errs
+// towards admitting; the limit is soft anyway.
+func unseen(local, cached []time.Time) []time.Time {
+	if len(local) == 0 {
+		return nil
+	}
+	slices.SortFunc(local, func(a, b time.Time) int { return a.Compare(b) })
+	from := local[0].Truncate(time.Second)
+	seen := 0
+	for _, t := range cached {
+		if !t.Before(from) {
+			seen++
+		}
+	}
+	if seen >= len(local) {
+		return nil
+	}
+	return local[seen:]
 }
 
 func (c SubmissionCheck) now() time.Time {

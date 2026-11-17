@@ -147,3 +147,40 @@ func TestSubmissionLimitHoldsForParallelRequests(t *testing.T) {
 		t.Error("fifth submission allowed with a limit of 4")
 	}
 }
+
+// TestSubmissionLimitCountsSameSecondOnce covers an admission and its
+// submission in the same second: creationTimestamp has whole seconds, so the
+// submission looks older than its own admission, and it must not count
+// twice.
+func TestSubmissionLimitCountsSameSecondOnce(t *testing.T) {
+	second := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	subs := fake.NewClientBuilder().WithScheme(scheme).
+		WithIndex(&v1.Submission{}, index.Owner, func(o client.Object) []string { return []string{o.(*v1.Submission).Spec.UserRef.Name} }).
+		Build()
+	now := second.Add(500 * time.Millisecond)
+	c := SubmissionCheck{Submissions: subs, Limit: 2, Window: 10 * time.Minute, Now: func() time.Time { return now }, Admitted: NewAdmitted()}
+	u := inUserContext("u1")
+	u.Extra[identity.EmailVerifiedExtraKey] = authenticationv1.ExtraValue{"true"}
+	req := request(t, admissionv1.Create, "submissions", u,
+		&v1.Submission{Spec: v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}, Kind: v1.SubmissionKindIdea, Title: "t", Body: "b"}}, nil)
+
+	if !c.Handle(context.Background(), req).Allowed {
+		t.Fatal("first submission denied")
+	}
+	// The API server stores it with the second the admission happened in.
+	if err := subs.Create(context.Background(), &v1.Submission{
+		ObjectMeta: metav1.ObjectMeta{Name: "s1", CreationTimestamp: metav1.NewTime(second)},
+		Spec:       v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now = second.Add(700 * time.Millisecond)
+	if !c.Handle(context.Background(), req).Allowed {
+		t.Error("second submission denied with a limit of 2: the first counted twice")
+	}
+	if c.Handle(context.Background(), req).Allowed {
+		t.Error("third submission allowed with a limit of 2")
+	}
+}
