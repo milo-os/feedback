@@ -18,9 +18,17 @@
 // {resource} is submissions or securityreports. Uploads send the file as the
 // body with its Content-Type. The reply is the uploadRef to put in
 // spec.attachments.
+//
+// Memory and time are bounded per replica. Downloads stream from the bucket
+// and never hold a file. Uploads buffer at most one file each, and Slots cap
+// how many uploads and downloads run at once; a full replica answers 503 with
+// Retry-After rather than queueing. NewHTTPServer's timeouts bound every
+// request without buffering replies, and a transfer gets a deadline sized for
+// its file (TransferTimeout).
 package uploads
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -66,6 +74,125 @@ type Server struct {
 	Objects client.Reader
 	// Limiter limits uploads per user. Nil doesn't limit.
 	Limiter *ratelimit.Limiter
+	// Uploads and Downloads cap concurrent transfers on this replica. Nil
+	// doesn't cap.
+	Uploads, Downloads Slots
+}
+
+// Default transfer caps, for the 256Mi container limit in
+// config/base/uploads and the default 10 MiB attachment-max-size.
+//
+// Memory budget per replica:
+//
+//   - An upload holds its body, up to MaxSize (10 MiB). When the client
+//     doesn't send Content-Length, growing the buffer can briefly need twice
+//     that. The bucket client then buffers up to about 16 MiB more while it
+//     sends the file (GCS uploads in 16 MiB chunks, S3 in 8 MiB parts). Call
+//     it 36 MiB at worst, so 4 uploads need about 144 MiB.
+//   - A download streams through a 32 KiB copy buffer plus the bucket
+//     client's and the connection's buffers, well under 1 MiB, so 32
+//     downloads need a few MiB.
+//   - The process itself (runtime, Milo and bucket clients) needs about 40
+//     MiB.
+//
+// That totals about 190 MiB, leaving headroom under 256Mi; GOMEMLIMIT in the
+// Deployment makes the GC work harder before the limit rather than letting
+// garbage push the process over it. Raising --attachment-max-size means
+// lowering --max-concurrent-uploads to match.
+const (
+	DefaultMaxUploads   = 4
+	DefaultMaxDownloads = 32
+)
+
+// Slots is a semaphore that caps concurrent transfers. A nil Slots has no
+// cap.
+type Slots chan struct{}
+
+// NewSlots returns n slots, or nil, for no cap, if n <= 0.
+func NewSlots(n int) Slots {
+	if n <= 0 {
+		return nil
+	}
+	return make(Slots, n)
+}
+
+// take takes a slot if one is free. It never waits: callers answer 503
+// instead, so a busy replica can't build an unbounded queue of waiting
+// requests and their connections.
+func (s Slots) take() bool {
+	if s == nil {
+		return true
+	}
+	select {
+	case s <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s Slots) give() {
+	if s != nil {
+		<-s
+	}
+}
+
+// RequestTimeout bounds each request apart from moving a file: reading it,
+// asking Milo, and writing a short reply. It is the server's ReadTimeout and
+// WriteTimeout.
+const RequestTimeout = 30 * time.Second
+
+// MinTransferRate is the slowest average rate, in bytes per second, at which
+// a client may send or receive a file; slower, and the deadline cuts it off.
+const MinTransferRate = 64 << 10
+
+// RetryAfter is how long a client is told to wait when every slot is taken.
+const RetryAfter = 5 * time.Second
+
+// TransferTimeout is how long moving a file of size bytes may take:
+// RequestTimeout, plus size at MinTransferRate. A 10 MiB file gets 3m10s.
+func TransferTimeout(size int64) time.Duration {
+	return RequestTimeout + time.Duration(size)*time.Second/MinTransferRate
+}
+
+// NewHTTPServer returns an HTTP server for h with timeouts that, unlike
+// http.TimeoutHandler, don't buffer replies: they are deadlines on the
+// connection. Transfers extend them for their own request (see transfer).
+func NewHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       RequestTimeout,
+		WriteTimeout:      RequestTimeout,
+		IdleTimeout:       2 * time.Minute,
+	}
+}
+
+// transfer moves this request's read and write deadlines to the time a file
+// of size bytes may take, and returns a context that ends then too, so a
+// stalled client or bucket can't hold a slot past it.
+//
+// The read deadline matters for downloads as well as uploads: once a request
+// has no body left, net/http reads the connection in the background to notice
+// the client leaving, and if that read hits the server's ReadTimeout it
+// cancels the request's context, which would cut a long download short.
+func transfer(w http.ResponseWriter, r *http.Request, size int64) (context.Context, context.CancelFunc) {
+	deadline := time.Now().Add(TransferTimeout(size))
+	rc := http.NewResponseController(w)
+	for _, set := range []func(time.Time) error{rc.SetReadDeadline, rc.SetWriteDeadline} {
+		// Only test recorders don't support deadlines.
+		if err := set(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			log.FromContext(r.Context()).Error(err, "Setting a transfer deadline failed")
+		}
+	}
+	return context.WithDeadline(r.Context(), deadline)
+}
+
+// busy answers a request that found every slot taken.
+func busy(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", strconv.Itoa(int(RetryAfter.Seconds())))
+	fail(w, http.StatusServiceUnavailable, "the service is busy; try again shortly")
 }
 
 // Handler returns the service's HTTP handler.
@@ -87,7 +214,6 @@ type Uploaded struct {
 }
 
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	resource, user := r.PathValue("resource"), r.PathValue("user")
 	purpose, ok := attachments.PurposeOf(resource)
 	if !ok {
@@ -105,26 +231,52 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusForbidden, "verify your email address to send files")
 		return
 	}
-	if ok, wait := s.Limiter.Allow(user); !ok {
-		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
-		fail(w, http.StatusTooManyRequests, "too many uploads; try again shortly")
-		return
-	}
 	contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil {
 		fail(w, http.StatusBadRequest, "set Content-Type to the file's media type")
 		return
 	}
-	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(s.Files.MaxSize)+1))
-	var tooBig *http.MaxBytesError
-	if errors.As(err, &tooBig) {
-		fail(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("the file is larger than %d bytes", s.Files.MaxSize))
+	maxSize := int64(s.Files.MaxSize)
+	tooBig := fmt.Sprintf("the file is larger than %d bytes", maxSize)
+	if r.ContentLength > maxSize {
+		fail(w, http.StatusRequestEntityTooLarge, tooBig)
+		return
+	}
+	if !s.Uploads.take() {
+		busy(w)
+		return
+	}
+	defer s.Uploads.give()
+	// After taking a slot, so a busy replica doesn't spend the user's quota.
+	if ok, wait := s.Limiter.Allow(user); !ok {
+		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		fail(w, http.StatusTooManyRequests, "too many uploads; try again shortly")
+		return
+	}
+	size := maxSize
+	if r.ContentLength >= 0 {
+		size = r.ContentLength
+	}
+	ctx, cancel := transfer(w, r, size)
+	defer cancel()
+	// The upload is buffered, up to MaxSize, because Check needs all of it to
+	// verify its type and the stored SHA-256 covers it. MaxBytesReader stops
+	// reading past MaxSize, and the upload slot bounds how many buffers exist
+	// at once. With a Content-Length the buffer is allocated once.
+	var body bytes.Buffer
+	if r.ContentLength >= 0 {
+		body.Grow(int(r.ContentLength) + bytes.MinRead)
+	}
+	_, err = body.ReadFrom(http.MaxBytesReader(w, r.Body, maxSize))
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		fail(w, http.StatusRequestEntityTooLarge, tooBig)
 		return
 	}
 	if err != nil {
 		fail(w, http.StatusBadRequest, "reading the file failed")
 		return
 	}
+	data := body.Bytes()
 	name := r.URL.Query().Get("name")
 	if msg := s.Files.Check(name, contentType, data); msg != "" {
 		fail(w, http.StatusBadRequest, msg)
@@ -172,23 +324,46 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "not found")
 		return
 	}
+	if !s.Downloads.take() {
+		busy(w)
+		return
+	}
+	defer s.Downloads.give()
 	f, err := s.Files.Get(ctx, purpose, name, owner, ref)
-	if errors.Is(err, attachments.ErrNotFound) {
-		fail(w, http.StatusNotFound, "not found")
-		return
-	}
 	if err != nil {
-		log.FromContext(ctx).Error(err, "Reading an attachment failed")
-		fail(w, http.StatusServiceUnavailable, "try again")
+		unreadable(ctx, w, err)
 		return
 	}
+	ctx, cancel := transfer(w, r, f.Size)
+	defer cancel()
+	body, err := f.Open(ctx)
+	if err != nil {
+		unreadable(ctx, w, err)
+		return
+	}
+	defer func() { _ = body.Close() }()
 	h := w.Header()
 	h.Set("Content-Type", f.ContentType)
+	h.Set("Content-Length", strconv.FormatInt(f.Size, 10))
 	h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": f.Name}))
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	h.Set("Cache-Control", "private, no-store")
-	_, _ = w.Write(f.Data)
+	if _, err := io.Copy(w, body); err != nil {
+		// The status has been sent, so all that's left is to stop short of
+		// Content-Length, which tells the client the file is incomplete.
+		log.FromContext(ctx).V(1).Info("Sending an attachment failed", "error", err.Error())
+	}
+}
+
+// unreadable answers a download whose file couldn't be read.
+func unreadable(ctx context.Context, w http.ResponseWriter, err error) {
+	if errors.Is(err, attachments.ErrNotFound) {
+		fail(w, http.StatusNotFound, "not found")
+		return
+	}
+	log.FromContext(ctx).Error(err, "Reading an attachment failed")
+	fail(w, http.StatusServiceUnavailable, "try again")
 }
 
 // attachmentsOf returns the owner and attachment refs of a submission or
@@ -259,6 +434,3 @@ func fail(w http.ResponseWriter, code int, msg string) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"message": msg})
 }
-
-// RequestTimeout bounds one request.
-const RequestTimeout = 30 * time.Second
