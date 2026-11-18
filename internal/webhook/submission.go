@@ -11,6 +11,7 @@ import (
 
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/duration"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -49,15 +50,28 @@ type SubmissionCheck struct {
 	Admitted *Admitted
 }
 
-// Admitted records when this replica admitted each user's submissions, so
-// SubmissionCheck can count the ones its cache doesn't show yet.
+// Admitted records the submissions this replica admitted that its cache
+// didn't show yet, so SubmissionCheck can count them.
 type Admitted struct {
 	mu     sync.Mutex
-	byUser map[string][]time.Time
+	byUser map[string][]admitted
 }
 
+// admitted is one submission this replica admitted: its UID, which the API
+// server sets before validating admission, and when it was admitted.
+type admitted struct {
+	uid types.UID
+	at  time.Time
+}
+
+// PendingTTL is how long an admission the cache doesn't show is still
+// counted. A create can fail after admission (another webhook or a
+// conflict), and its submission never appears; this stops it from counting
+// for a whole window. The cache normally catches up in well under a second.
+const PendingTTL = time.Minute
+
 // NewAdmitted returns an empty record.
-func NewAdmitted() *Admitted { return &Admitted{byUser: map[string][]time.Time{}} }
+func NewAdmitted() *Admitted { return &Admitted{byUser: map[string][]admitted{}} }
 
 var _ admission.Handler = SubmissionCheck{}
 
@@ -92,27 +106,43 @@ func (c SubmissionCheck) Handle(ctx context.Context, req admission.Request) admi
 	}
 	now := c.now()
 	since := now.Add(-c.Window)
-	var recent, cached []time.Time
+	var recent []time.Time
+	cached := make(map[types.UID]bool, len(mine.Items))
 	for _, s := range mine.Items {
-		t := s.CreationTimestamp.Time
-		if t.After(since) {
+		if s.UID != "" {
+			cached[s.UID] = true
+		}
+		if t := s.CreationTimestamp.Time; t.After(since) {
 			recent = append(recent, t)
-			cached = append(cached, t)
 		}
 	}
 	if c.Admitted != nil {
-		var local []time.Time
-		for _, t := range c.Admitted.byUser[owner] {
-			if t.After(since) {
-				local = append(local, t)
+		// The cache counts the submissions it shows; this replica's record
+		// adds the ones it admitted that the cache doesn't show yet. The two
+		// are matched by UID, never by time: creationTimestamp has whole
+		// seconds and is set before admission, so it can fall in an earlier
+		// second than the admission.
+		var pending []admitted
+		for _, a := range c.Admitted.byUser[owner] {
+			if cached[a.uid] || !a.at.After(since) || now.Sub(a.at) >= PendingTTL {
+				continue
+			}
+			pending = append(pending, a)
+			// The same create admitted again doesn't count against itself.
+			if a.uid == "" || a.uid != sub.UID {
+				recent = append(recent, a.at)
 			}
 		}
-		c.Admitted.byUser[owner] = local
-		recent = append(recent, unseen(local, cached)...)
+		if len(pending) == 0 {
+			delete(c.Admitted.byUser, owner)
+		} else {
+			c.Admitted.byUser[owner] = pending
+		}
 	}
 	if len(recent) < c.Limit {
-		if c.Admitted != nil {
-			c.Admitted.byUser[owner] = append(c.Admitted.byUser[owner], now)
+		// A dry run creates nothing, so it doesn't use up the limit.
+		if c.Admitted != nil && !isDryRun(req) && !c.Admitted.has(owner, sub.UID) {
+			c.Admitted.byUser[owner] = append(c.Admitted.byUser[owner], admitted{uid: sub.UID, at: now})
 		}
 		return admission.Allowed("")
 	}
@@ -125,31 +155,16 @@ func (c SubmissionCheck) Handle(ctx context.Context, req admission.Request) admi
 	return resp
 }
 
-// unseen returns the admissions in local, oldest first, that the cache
-// doesn't show yet. Every submission this replica admitted is created after
-// its admission, so the cached submissions created since the oldest
-// admission account for that many of them. creationTimestamp has whole
-// seconds, so the comparison rounds the admission time down: an admission
-// and its submission in the same second must not both count. A submission
-// another replica created in that time also accounts for one, which errs
-// towards admitting; the limit is soft anyway.
-func unseen(local, cached []time.Time) []time.Time {
-	if len(local) == 0 {
-		return nil
+// has reports whether uid is already recorded for owner, so a repeated
+// admission of the same create counts once. Callers hold a.mu.
+func (a *Admitted) has(owner string, uid types.UID) bool {
+	if uid == "" {
+		return false
 	}
-	slices.SortFunc(local, func(a, b time.Time) int { return a.Compare(b) })
-	from := local[0].Truncate(time.Second)
-	seen := 0
-	for _, t := range cached {
-		if !t.Before(from) {
-			seen++
-		}
-	}
-	if seen >= len(local) {
-		return nil
-	}
-	return local[seen:]
+	return slices.ContainsFunc(a.byUser[owner], func(x admitted) bool { return x.uid == uid })
 }
+
+func isDryRun(req admission.Request) bool { return req.DryRun != nil && *req.DryRun }
 
 func (c SubmissionCheck) now() time.Time {
 	if c.Now != nil {
