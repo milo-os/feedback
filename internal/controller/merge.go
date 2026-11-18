@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"go.miloapis.com/feedback/internal/index"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
@@ -28,8 +29,6 @@ const (
 	// post looking for the post its votes go to. Real chains are one or two
 	// long; this only stops a runaway walk.
 	maxMergeChain = 10
-	// mergedIntoIndex indexes posts by status.mergedInto.
-	mergedIntoIndex = "status.mergedInto"
 	// MergeFieldManager applies the VotesMoved condition on posts. It is not
 	// FieldManager, which applies status.votes: an apply drops the fields its
 	// manager applied before and left out, so each needs its own.
@@ -77,7 +76,7 @@ func (r *MergeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	var votes v1.VoteList
-	if err := r.List(ctx, &votes, client.MatchingFields{postIndex: post.Name}); err != nil {
+	if err := r.List(ctx, &votes, client.MatchingFields{index.Post: post.Name}); err != nil {
 		return ctrl.Result{}, err
 	}
 	for i := range votes.Items {
@@ -92,7 +91,7 @@ func (r *MergeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	var subs v1.SubscriptionList
-	if err := r.List(ctx, &subs, client.MatchingFields{postIndex: post.Name}); err != nil {
+	if err := r.List(ctx, &subs, client.MatchingFields{index.Post: post.Name}); err != nil {
 		return ctrl.Result{}, err
 	}
 	for i := range subs.Items {
@@ -238,7 +237,7 @@ func (r *MergeReconciler) mergedIntoPost(ctx context.Context, post client.Object
 		var found []string
 		for _, name := range next {
 			var posts v1.PostList
-			if err := r.List(ctx, &posts, client.MatchingFields{mergedIntoIndex: name}); err != nil {
+			if err := r.List(ctx, &posts, client.MatchingFields{index.MergedInto: name}); err != nil {
 				log.FromContext(ctx).Error(err, "Listing posts merged into a post failed", "post", name)
 				return reqs
 			}

@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"go.miloapis.com/feedback/internal/index"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
@@ -74,6 +75,9 @@ func start(t *testing.T, now *clock) client.Client {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	if err := index.Add(ctx, mgr); err != nil {
+		t.Fatal(err)
+	}
 	if err := Setup(ctx, mgr, Options{Users: fakeUsers{}, Now: now.Now}); err != nil {
 		t.Fatal(err)
 	}
@@ -267,5 +271,129 @@ func TestReconcilers(t *testing.T) {
 			}
 			return errorf("still there")
 		})
+	})
+}
+
+func TestSubmissionReviews(t *testing.T) {
+	c := start(t, &clock{now: time.Now()})
+	ctx := context.Background()
+
+	submit := func(name, user string) *v1.Submission {
+		s := &v1.Submission{
+			ObjectMeta: metav1.ObjectMeta{Name: name},
+			Spec: v1.SubmissionSpec{UserRef: v1.UserReference{Name: user}, Kind: v1.SubmissionKindIdea, Title: "t", Body: "b",
+				Context: v1.SubmissionContext{Client: v1.ClientPortal}},
+		}
+		if err := c.Create(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	decide := func(name string, spec v1.SubmissionReviewSpec) {
+		eventually(t, "review for "+name, func() error {
+			var r v1.SubmissionReview
+			if err := c.Get(ctx, types.NamespacedName{Name: name}, &r); err != nil {
+				return err
+			}
+			r.Spec = spec
+			return c.Update(ctx, &r)
+		})
+	}
+	phase := func(name string, want v1.SubmissionPhase, post string) {
+		eventually(t, name+" "+string(want), func() error {
+			var s v1.Submission
+			if err := c.Get(ctx, types.NamespacedName{Name: name}, &s); err != nil {
+				return err
+			}
+			got := ""
+			if s.Status.PostRef != nil {
+				got = s.Status.PostRef.Name
+			}
+			if s.Status.Phase != want || got != post {
+				return errorf(string(s.Status.Phase) + " " + got)
+			}
+			return nil
+		})
+	}
+	has := func(obj client.Object) error { return c.Get(ctx, client.ObjectKeyFromObject(obj), obj) }
+
+	t.Run("new submissions wait for review", func(t *testing.T) {
+		submit("sub-new", "u1")
+		phase("sub-new", v1.SubmissionPhasePendingReview, "")
+	})
+
+	t.Run("rejected", func(t *testing.T) {
+		submit("sub-rej", "u1")
+		decide("sub-rej", v1.SubmissionReviewSpec{Decision: v1.ReviewDecisionRejected, Reason: "Out of scope"})
+		phase("sub-rej", v1.SubmissionPhaseRejected, "")
+	})
+
+	t.Run("merged into a post", func(t *testing.T) {
+		if err := c.Create(ctx, &v1.Post{ObjectMeta: metav1.ObjectMeta{Name: "a.b.10"}}); err != nil {
+			t.Fatal(err)
+		}
+		submit("sub-merge", "u5")
+		decide("sub-merge", v1.SubmissionReviewSpec{Decision: v1.ReviewDecisionMerged, MergedInto: "a.b.10"})
+		phase("sub-merge", v1.SubmissionPhaseMerged, "a.b.10")
+		eventually(t, "follow and vote", func() error {
+			s := &v1.Subscription{ObjectMeta: metav1.ObjectMeta{Name: v1.OwnedName("a.b.10", "u5")}}
+			if err := has(s); err != nil {
+				return err
+			}
+			if s.Spec.Reason != v1.SubscriptionReasonMerged {
+				return errorf("reason " + string(s.Spec.Reason))
+			}
+			v := &v1.Vote{ObjectMeta: metav1.ObjectMeta{Name: v1.OwnedName("a.b.10", "u5")}}
+			if err := has(v); err != nil {
+				return err
+			}
+			if v.Spec.Source != v1.ClientPortal {
+				return errorf("source " + string(v.Spec.Source))
+			}
+			return nil
+		})
+	})
+
+	t.Run("approved, then linked when its post syncs", func(t *testing.T) {
+		submit("sub-ok", "u6")
+		decide("sub-ok", v1.SubmissionReviewSpec{Decision: v1.ReviewDecisionApproved, PublicTitle: "T", PublicBody: "B"})
+		phase("sub-ok", v1.SubmissionPhaseApproved, "")
+		eventually(t, "waiting condition", func() error {
+			var r v1.SubmissionReview
+			if err := c.Get(ctx, types.NamespacedName{Name: "sub-ok"}, &r); err != nil {
+				return err
+			}
+			if r.Status.Applied || len(r.Status.Conditions) == 0 || r.Status.Conditions[0].Reason != "WaitingForPost" {
+				return errorf("not waiting")
+			}
+			return nil
+		})
+		// feedback-sync creates the issue and syncs its post.
+		post := &v1.Post{ObjectMeta: metav1.ObjectMeta{Name: "datum-cloud.enhancements.99",
+			Annotations: map[string]string{v1.FromSubmissionAnnotation: "sub-ok"}}}
+		if err := c.Create(ctx, post); err != nil {
+			t.Fatal(err)
+		}
+		phase("sub-ok", v1.SubmissionPhaseApproved, post.Name)
+		eventually(t, "applied", func() error {
+			var r v1.SubmissionReview
+			if err := c.Get(ctx, types.NamespacedName{Name: "sub-ok"}, &r); err != nil {
+				return err
+			}
+			if !r.Status.Applied {
+				return errorf("not applied")
+			}
+			return has(&v1.Vote{ObjectMeta: metav1.ObjectMeta{Name: v1.OwnedName(post.Name, "u6")}})
+		})
+	})
+
+	t.Run("the review goes with its submission", func(t *testing.T) {
+		var r v1.SubmissionReview
+		if err := c.Get(ctx, types.NamespacedName{Name: "sub-new"}, &r); err != nil {
+			t.Fatal(err)
+		}
+		if len(r.OwnerReferences) != 1 || r.OwnerReferences[0].Name != "sub-new" {
+			t.Errorf("owner references %v", r.OwnerReferences)
+		}
 	})
 }

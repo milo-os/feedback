@@ -138,7 +138,7 @@ func TestCRDs(t *testing.T) {
 	t.Run("submissions can't change", func(t *testing.T) {
 		s := &v1.Submission{
 			ObjectMeta: metav1.ObjectMeta{Name: "sub-2"},
-			Spec: v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}, Kind: v1.SubmissionKindIdea, Title: "t", Body: "b"},
+			Spec:       v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}, Kind: v1.SubmissionKindIdea, Title: "t", Body: "b"},
 		}
 		if err := c.Create(ctx, s); err != nil {
 			t.Fatal(err)

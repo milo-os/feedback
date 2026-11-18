@@ -26,6 +26,7 @@ import (
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"go.miloapis.com/feedback/internal/identity"
+	"go.miloapis.com/feedback/internal/index"
 	"go.miloapis.com/feedback/internal/webhook"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
@@ -98,9 +99,12 @@ func startWithWebhooks(t *testing.T) *withWebhooks {
 	if err != nil {
 		t.Fatal(err)
 	}
-	webhook.Register(mgr)
+	webhook.Register(mgr, webhook.Options{})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	if err := index.Add(ctx, mgr); err != nil {
+		t.Fatal(err)
+	}
 	if err := Setup(ctx, mgr, Options{Users: fakeUsers{}}); err != nil {
 		t.Fatal(err)
 	}

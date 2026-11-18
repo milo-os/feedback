@@ -42,8 +42,14 @@ func (c VoteCheck) Handle(ctx context.Context, req admission.Request) admission.
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 	name, _, _ := unstructured.NestedString(obj.Object, "spec", "postRef", "name")
+	return checkPost(ctx, c.Posts, name)
+}
+
+// checkPost admits a reference to a post that exists, isn't hidden and isn't
+// merged into another.
+func checkPost(ctx context.Context, posts client.Reader, name string) admission.Response {
 	var post v1.Post
-	err := c.Posts.Get(ctx, types.NamespacedName{Name: name}, &post)
+	err := posts.Get(ctx, types.NamespacedName{Name: name}, &post)
 	switch {
 	case apierrors.IsNotFound(err) || (err == nil && post.Spec.Hidden):
 		return admission.Denied(fmt.Sprintf("post %q not found", name))

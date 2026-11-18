@@ -60,7 +60,7 @@ type DigestItem struct {
 	Submission string `json:"submission,omitempty"`
 	// Changelog is the ChangelogEntry for part-shipped and released.
 	// +optional
-	Changelog string `json:"changelog,omitempty"`
+	Changelog string      `json:"changelog,omitempty"`
 	At        metav1.Time `json:"at"`
 }
 
