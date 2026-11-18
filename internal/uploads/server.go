@@ -22,7 +22,8 @@
 // Memory and time are bounded per replica. Downloads stream from the bucket
 // and never hold a file. Uploads buffer at most one file each, and Slots cap
 // how many uploads and downloads run at once; a full replica answers 503 with
-// Retry-After rather than queueing. NewHTTPServer's timeouts bound every
+// Retry-After rather than queueing. UserSlots cap each user's share of them,
+// so one user can't take every slot; a user at their cap gets 429. NewHTTPServer's timeouts bound every
 // request without buffering replies, and a transfer gets a deadline sized for
 // its file (TransferTimeout).
 package uploads
@@ -39,6 +40,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -77,6 +79,10 @@ type Server struct {
 	// Uploads and Downloads cap concurrent transfers on this replica. Nil
 	// doesn't cap.
 	Uploads, Downloads Slots
+	// UploadsPerUser and DownloadsPerUser cap one user's concurrent
+	// transfers on this replica, below Uploads and Downloads, so slow
+	// requests from one user can't keep everyone else busy. Nil doesn't cap.
+	UploadsPerUser, DownloadsPerUser *UserSlots
 }
 
 // Default transfer caps, for the 256Mi container limit in
@@ -99,9 +105,14 @@ type Server struct {
 // Deployment makes the GC work harder before the limit rather than letting
 // garbage push the process over it. Raising --attachment-max-size means
 // lowering --max-concurrent-uploads to match.
+//
+// One user may hold half the uploads and a quarter of the downloads, so
+// others always have slots left.
 const (
-	DefaultMaxUploads   = 4
-	DefaultMaxDownloads = 32
+	DefaultMaxUploads          = 4
+	DefaultMaxDownloads        = 32
+	DefaultMaxUploadsPerUser   = 2
+	DefaultMaxDownloadsPerUser = 8
 )
 
 // Slots is a semaphore that caps concurrent transfers. A nil Slots has no
@@ -137,6 +148,80 @@ func (s Slots) give() {
 	}
 }
 
+// UserSlots caps how many transfers each user runs at once. A nil UserSlots
+// has no cap.
+type UserSlots struct {
+	max  int
+	mu   sync.Mutex
+	held map[string]int
+}
+
+// NewUserSlots returns a cap of n transfers per user, or nil, for no cap, if
+// n <= 0.
+func NewUserSlots(n int) *UserSlots {
+	if n <= 0 {
+		return nil
+	}
+	return &UserSlots{max: n, held: map[string]int{}}
+}
+
+// take takes one of user's slots if they have one free. Like Slots.take, it
+// never waits.
+func (u *UserSlots) take(user string) bool {
+	if u == nil {
+		return true
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.held[user] >= u.max {
+		return false
+	}
+	u.held[user]++
+	return true
+}
+
+func (u *UserSlots) give(user string) {
+	if u == nil {
+		return
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.held[user]--; u.held[user] <= 0 {
+		delete(u.held, user)
+	}
+}
+
+// inUse reports how many of user's slots are taken.
+func (u *UserSlots) inUse(user string) int {
+	if u == nil {
+		return 0
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.held[user]
+}
+
+// claim takes a transfer slot for user: one of theirs, then one of the
+// replica's. If either is full it answers the request, 429 for the user's
+// cap and 503 for the replica's, and returns ok false. Otherwise the caller
+// must call release when the transfer ends.
+func claim(w http.ResponseWriter, perUser *UserSlots, replica Slots, user string) (release func(), ok bool) {
+	if !perUser.take(user) {
+		w.Header().Set("Retry-After", strconv.Itoa(int(RetryAfter.Seconds())))
+		fail(w, http.StatusTooManyRequests, "you have too many transfers in progress; try again when one finishes")
+		return nil, false
+	}
+	if !replica.take() {
+		perUser.give(user)
+		busy(w)
+		return nil, false
+	}
+	return func() {
+		replica.give()
+		perUser.give(user)
+	}, true
+}
+
 // RequestTimeout bounds each request apart from moving a file: reading it,
 // asking Milo, and writing a short reply. It is the server's ReadTimeout and
 // WriteTimeout.
@@ -146,7 +231,8 @@ const RequestTimeout = 30 * time.Second
 // a client may send or receive a file; slower, and the deadline cuts it off.
 const MinTransferRate = 64 << 10
 
-// RetryAfter is how long a client is told to wait when every slot is taken.
+// RetryAfter is how long a client is told to wait when every slot, or every
+// one of their own, is taken.
 const RetryAfter = 5 * time.Second
 
 // TransferTimeout is how long moving a file of size bytes may take:
@@ -242,11 +328,11 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusRequestEntityTooLarge, tooBig)
 		return
 	}
-	if !s.Uploads.take() {
-		busy(w)
+	release, ok := claim(w, s.UploadsPerUser, s.Uploads, caller.Username)
+	if !ok {
 		return
 	}
-	defer s.Uploads.give()
+	defer release()
 	// After taking a slot, so a busy replica doesn't spend the user's quota.
 	if ok, wait := s.Limiter.Allow(user); !ok {
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
@@ -324,11 +410,11 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "not found")
 		return
 	}
-	if !s.Downloads.take() {
-		busy(w)
+	release, ok := claim(w, s.DownloadsPerUser, s.Downloads, caller.Username)
+	if !ok {
 		return
 	}
-	defer s.Downloads.give()
+	defer release()
 	f, err := s.Files.Get(ctx, purpose, name, owner, ref)
 	if err != nil {
 		unreadable(ctx, w, err)

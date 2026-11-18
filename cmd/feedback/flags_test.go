@@ -49,3 +49,20 @@ func TestDeploymentArgsParse(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckUserCap(t *testing.T) {
+	for _, c := range []struct {
+		perUser, replica int
+		ok               bool
+	}{
+		{2, 4, true},
+		{4, 4, false},
+		{5, 4, false},
+		{0, 4, true},
+		{4, 0, true},
+	} {
+		if err := checkUserCap("uploads", c.perUser, c.replica); (err == nil) != c.ok {
+			t.Errorf("per user %d, replica %d: %v", c.perUser, c.replica, err)
+		}
+	}
+}

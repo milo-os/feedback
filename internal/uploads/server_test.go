@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,14 +28,18 @@ import (
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
-// fakeMilo knows two tokens: "ada" (user u1) and "staff". Ada may act in
-// her own context; staff may get submissions in the platform context.
+// fakeMilo knows three tokens: "ada" (user u1), "grace" (user u2) and
+// "staff". Ada and Grace may act in their own contexts; staff may get
+// submissions in the platform context.
 type fakeMilo struct{}
 
 func (fakeMilo) Authenticate(_ context.Context, token string) (authenticationv1.UserInfo, bool, error) {
 	switch token {
 	case "ada":
 		return authenticationv1.UserInfo{Username: "ada@example.com", Extra: map[string]authenticationv1.ExtraValue{
+			identity.EmailVerifiedExtraKey: {"true"}}}, true, nil
+	case "grace":
+		return authenticationv1.UserInfo{Username: "grace@example.com", Extra: map[string]authenticationv1.ExtraValue{
 			identity.EmailVerifiedExtraKey: {"true"}}}, true, nil
 	case "staff":
 		return authenticationv1.UserInfo{Username: "staff@datum.net"}, true, nil
@@ -46,6 +51,8 @@ func (fakeMilo) Allowed(_ context.Context, u authenticationv1.UserInfo, attrs au
 	switch u.Username {
 	case "ada@example.com":
 		return inUserContext == "u1", nil
+	case "grace@example.com":
+		return inUserContext == "u2", nil
 	case "staff@datum.net":
 		return inUserContext == "" && attrs.Resource == "submissions" && attrs.Verb == "get", nil
 	}
@@ -301,6 +308,94 @@ func TestBusy(t *testing.T) {
 	// Finished transfers gave their slots back.
 	if len(s.Uploads) != 0 || len(s.Downloads) != 0 {
 		t.Errorf("slots in use after transfers finished: %d uploads, %d downloads", len(s.Uploads), len(s.Downloads))
+	}
+}
+
+// TestOneUserCannotTakeEverySlot holds two of Ada's uploads open, as slow
+// clients would, and checks she can't start a third while Grace still can.
+func TestOneUserCannotTakeEverySlot(t *testing.T) {
+	s, h := newServer(t)
+	s.Uploads, s.UploadsPerUser = NewSlots(4), NewUserSlots(2)
+	const ada = "ada@example.com"
+
+	var wg sync.WaitGroup
+	var bodies []*io.PipeWriter
+	codes := make(chan int, 2)
+	for range 2 {
+		r, w := io.Pipe()
+		bodies = append(bodies, w)
+		req := httptest.NewRequest(http.MethodPost, "/users/u1/uploads/submissions?name=slow.txt", r)
+		req.Header.Set("Authorization", "Bearer ada")
+		req.Header.Set("Content-Type", "text/plain")
+		wg.Go(func() {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			codes <- rec.Code
+		})
+	}
+	defer func() {
+		for _, w := range bodies {
+			_ = w.Close()
+		}
+	}()
+	for deadline := time.Now().Add(5 * time.Second); s.UploadsPerUser.inUse(ada) < 2; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("slow uploads hold %d of Ada's slots, want 2", s.UploadsPerUser.inUse(ada))
+		}
+	}
+
+	rec := do(h, http.MethodPost, "/users/u1/uploads/submissions?name=third.txt", "ada", "text/plain", []byte("third"))
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") != "5" {
+		t.Errorf("Ada's third upload: %d, Retry-After %q", rec.Code, rec.Header().Get("Retry-After"))
+	}
+	if rec := do(h, http.MethodPost, "/users/u2/uploads/submissions?name=g.txt", "grace", "text/plain", []byte("hi")); rec.Code != http.StatusCreated {
+		t.Errorf("Grace's upload while Ada's are in progress: %d %s", rec.Code, rec.Body)
+	}
+	if len(s.Uploads) != 2 {
+		t.Errorf("replica slots in use: %d, want Ada's 2", len(s.Uploads))
+	}
+
+	for _, w := range bodies {
+		_, _ = w.Write([]byte("slow"))
+		_ = w.Close()
+	}
+	wg.Wait()
+	close(codes)
+	for code := range codes {
+		if code != http.StatusCreated {
+			t.Errorf("slow upload finished with %d", code)
+		}
+	}
+	if len(s.Uploads) != 0 || s.UploadsPerUser.inUse(ada) != 0 {
+		t.Errorf("slots in use after uploads finished: %d replica, %d Ada's", len(s.Uploads), s.UploadsPerUser.inUse(ada))
+	}
+	if rec := do(h, http.MethodPost, "/users/u1/uploads/submissions?name=again.txt", "ada", "text/plain", []byte("again")); rec.Code != http.StatusCreated {
+		t.Errorf("Ada's upload once hers finished: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestUserDownloadCap(t *testing.T) {
+	s, h := newServer(t)
+	s.Downloads, s.DownloadsPerUser = NewSlots(4), NewUserSlots(1)
+	ref := uploadRef(t, do(h, http.MethodPost, "/users/u1/uploads/submissions?name=a.txt", "ada", "text/plain", []byte("hello")))
+	attach(t, s, "sub-1", "u1", ref)
+	download := func() *httptest.ResponseRecorder {
+		return do(h, http.MethodGet, "/users/u1/submissions/sub-1/attachments/"+ref, "ada", "", nil)
+	}
+
+	// As a download in progress would.
+	if !s.DownloadsPerUser.take("ada@example.com") {
+		t.Fatal("Ada's slot should be free")
+	}
+	if rec := download(); rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") != "5" {
+		t.Errorf("download at Ada's cap: %d, Retry-After %q", rec.Code, rec.Header().Get("Retry-After"))
+	}
+	if len(s.Downloads) != 0 {
+		t.Errorf("a refused download kept a replica slot")
+	}
+	s.DownloadsPerUser.give("ada@example.com")
+	if rec := download(); rec.Code != http.StatusOK || rec.Body.String() != "hello" {
+		t.Errorf("download once Ada's slot is free: %d %s", rec.Code, rec.Body)
 	}
 }
 

@@ -20,14 +20,16 @@ import (
 )
 
 type uploadsOptions struct {
-	miloKubeconfig string
-	addr           string
-	bucket         string
-	maxSize        int
-	perMinute      float64
-	burst          int
-	maxUploads     int
-	maxDownloads   int
+	miloKubeconfig   string
+	addr             string
+	bucket           string
+	maxSize          int
+	perMinute        float64
+	burst            int
+	maxUploads       int
+	maxDownloads     int
+	maxUserUploads   int
+	maxUserDownloads int
 }
 
 func newUploadsCommand() *cobra.Command {
@@ -50,6 +52,8 @@ func newUploadsCommand() *cobra.Command {
 	f.IntVar(&o.burst, "uploads-burst", 10, "Uploads a user may make at once.")
 	f.IntVar(&o.maxUploads, "max-concurrent-uploads", uploads.DefaultMaxUploads, "Uploads one replica handles at once; more get 503 with Retry-After. Each can hold up to twice --attachment-max-size, plus about 16 MiB of bucket client buffers, so lower this if you raise that. 0 disables the cap.")
 	f.IntVar(&o.maxDownloads, "max-concurrent-downloads", uploads.DefaultMaxDownloads, "Downloads one replica streams at once; more get 503 with Retry-After. 0 disables the cap.")
+	f.IntVar(&o.maxUserUploads, "max-concurrent-uploads-per-user", uploads.DefaultMaxUploadsPerUser, "Uploads one user may run at once on one replica; more get 429 with Retry-After. Must be below --max-concurrent-uploads, so one user can't take every slot. 0 disables the cap.")
+	f.IntVar(&o.maxUserDownloads, "max-concurrent-downloads-per-user", uploads.DefaultMaxDownloadsPerUser, "Downloads one user may run at once on one replica; more get 429 with Retry-After. Must be below --max-concurrent-downloads. 0 disables the cap.")
 	goFlags := flag.NewFlagSet("zap", flag.ExitOnError)
 	zapOpts.BindFlags(goFlags)
 	f.AddGoFlagSet(goFlags)
@@ -60,6 +64,12 @@ func runUploads(ctx context.Context, o uploadsOptions) error {
 	log := ctrl.Log.WithName("uploads")
 	if o.bucket == "" {
 		return errors.New("--attachments-bucket is required")
+	}
+	if err := checkUserCap("uploads", o.maxUserUploads, o.maxUploads); err != nil {
+		return err
+	}
+	if err := checkUserCap("downloads", o.maxUserDownloads, o.maxDownloads); err != nil {
+		return err
 	}
 	files, err := attachments.Open(ctx, o.bucket)
 	if err != nil {
@@ -85,6 +95,8 @@ func runUploads(ctx context.Context, o uploadsOptions) error {
 		Files: files, Authn: milo, Authz: milo, Objects: objects,
 		Limiter: ratelimit.NewLimiter(o.perMinute, o.burst),
 		Uploads: uploads.NewSlots(o.maxUploads), Downloads: uploads.NewSlots(o.maxDownloads),
+		UploadsPerUser:   uploads.NewUserSlots(o.maxUserUploads),
+		DownloadsPerUser: uploads.NewUserSlots(o.maxUserDownloads),
 	}
 	srv := uploads.NewHTTPServer(o.addr, s.Handler())
 	go func() {
@@ -96,6 +108,15 @@ func runUploads(ctx context.Context, o uploadsOptions) error {
 	log.Info("Serving uploads", "address", o.addr)
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
+	}
+	return nil
+}
+
+// checkUserCap refuses a per-user cap that would let one user take every one
+// of the replica's slots.
+func checkUserCap(kind string, perUser, replica int) error {
+	if perUser > 0 && replica > 0 && perUser >= replica {
+		return fmt.Errorf("--max-concurrent-%s-per-user (%d) must be below --max-concurrent-%s (%d), so one user can't take every slot", kind, perUser, kind, replica)
 	}
 	return nil
 }
