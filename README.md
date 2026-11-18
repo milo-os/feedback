@@ -16,8 +16,9 @@ webhooks.
 
 ## Status
 
-The CRDs are defined and the operator starts. Admission webhooks and
-reconcilers are tracked as sub-issues of the epic.
+The CRDs are defined. The operator sets owners and reviewers in admission,
+and reconciles votes and follows. Submissions, security reports and
+attachments are tracked as sub-issues of the epic.
 
 | Resource | Who writes it | Who reads it |
 | --- | --- | --- |
@@ -50,6 +51,13 @@ operator creates them for someone else, and the Security Team logs reports
 for external reporters with no owner. The `reviewer` webhook records who
 decided on a `SubmissionReview`.
 
+## Votes
+
+- **Admission** (`vote` webhook). A vote or follow needs a post that exists, isn't hidden and isn't merged. A vote also needs a verified email address.
+- **`vote` reconciler.** It follows the post for each new voter, then sets `status.subscribed` so a follow the voter deletes isn't recreated. It records the voter's organizations and linked GitHub username in the vote's status; these Milo lookups are best effort. Votes on a deleted post are marked with `feedback.miloapis.com/orphaned-at` and deleted after 30 days unless the post returns.
+- **`post-votes` reconciler.** It counts a post's votes from the cache (indexed by `spec.postRef.name`) and applies `status.votes.{total,datum,linked,trendingScore}` with server-side apply as `feedback-operator`. `github` and `githubReactions` belong to `feedback-sync`. `total = datum + github - linked`, where `linked` counts people whose 👍 comes from the GitHub account linked to their vote. Posts with a trending score are re-tallied hourly as votes age.
+- **`merge` reconciler.** When `status.mergedInto` is set, it gives each voter and follower the same on the target post, unless they already have one, and deletes the old one.
+
 ## Roles
 
 | Role | For |
@@ -67,7 +75,9 @@ client certificates and get Kubernetes RBAC in Milo (`config/milo/rbac`).
 
 ```
 cmd/feedback/             operator and version commands
+internal/controller/      reconcilers
 internal/identity/        who a request comes from, from Milo's user info
+internal/milo/            voter lookups in Milo
 internal/webhook/         admission webhooks Milo calls
 pkg/apis/feedback/        feedback.miloapis.com/v1alpha1 types (CRDs)
 config/crd/               generated CRDs, installed in Milo

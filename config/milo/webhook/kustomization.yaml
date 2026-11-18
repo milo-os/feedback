@@ -31,3 +31,19 @@ patches:
       - op: replace
         path: /webhooks/1/clientConfig/service/namespace
         value: feedback-system
+  - target:
+      kind: ValidatingWebhookConfiguration
+      name: validating-webhook-configuration
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: feedback.miloapis.com
+  - target:
+      kind: ValidatingWebhookConfiguration
+    patch: |-
+      - op: replace
+        path: /webhooks/0/clientConfig/service/name
+        value: feedback-operator-webhook
+      - op: replace
+        path: /webhooks/0/clientConfig/service/namespace
+        value: feedback-system

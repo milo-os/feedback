@@ -10,4 +10,5 @@ func Register(mgr manager.Manager) {
 	s := mgr.GetWebhookServer()
 	s.Register("/mutate-owner", &webhook.Admission{Handler: Owner{}})
 	s.Register("/mutate-submissionreview", &webhook.Admission{Handler: Reviewer{}})
+	s.Register("/validate-vote", &webhook.Admission{Handler: VoteCheck{Posts: mgr.GetClient()}})
 }
