@@ -6,10 +6,15 @@ metadata:
   labels:
     app.kubernetes.io/name: admin
     app.kubernetes.io/part-of: feedback.miloapis.com
+  annotations:
+    kubernetes.io/display-name: Feedback Admin
+    kubernetes.io/description: "Everything an editor and a reviewer can do, plus deleting feedback sources. Security reports stay with the Security Team role."
 spec:
   launchStage: Alpha
   inheritedRoles:
     - name: feedback.miloapis.com-editor
+      namespace: milo-system
+    - name: feedback.miloapis.com-reviewer
       namespace: milo-system
   includedPermissions:
     - feedback.miloapis.com/feedbacksources.delete

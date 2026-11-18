@@ -44,16 +44,40 @@ see live on separate staff-only kinds (`SubmissionReview`,
 Vote and Subscription names are `<post>.<user>`, which gives one per user per
 post across the shared collection.
 
+The `owner` admission webhook sets `spec.userRef` on every user-owned kind
+from the request: in a user's own context it is always that user. Only the
+operator creates them for someone else, and the Security Team logs reports
+for external reporters with no owner. The `reviewer` webhook records who
+decided on a `SubmissionReview`.
+
+## Roles
+
+| Role | For |
+| --- | --- |
+| `feedback.miloapis.com-user` | every signed-in user, in their own context, through Milo's `iam-user-self-manage` |
+| `feedback.miloapis.com-public-reader` | the datum.net service account |
+| `feedback.miloapis.com-viewer`, `-editor`, `-reviewer`, `-admin` | staff |
+| `feedback.miloapis.com-security-team` | the Security Team only; the only role that reads every report and their triage |
+
+The service's components (`system:feedback-operator`, `system:feedback-sync`,
+`system:feedback-uploads`, all `@feedback.miloapis.com`) authenticate with
+client certificates and get Kubernetes RBAC in Milo (`config/milo/rbac`).
+
 ## Layout
 
 ```
 cmd/feedback/             operator and version commands
+internal/identity/        who a request comes from, from Milo's user info
+internal/webhook/         admission webhooks Milo calls
 pkg/apis/feedback/        feedback.miloapis.com/v1alpha1 types (CRDs)
 config/crd/               generated CRDs, installed in Milo
 config/base/              operator Deployment, Services, leader election RBAC
 config/components/        milo-integration: Milo kubeconfig, client and webhook certificates
-config/milo/              Milo IAM ProtectedResources and Roles
+config/milo/              applied to Milo: IAM (iam/), RBAC for the service's
+                          components (rbac/), webhook config (webhook/), and
+                          optional role bindings (bindings/)
 config/samples/           an example of every resource
+test/config/              checks config/ against the CRDs
 ```
 
 ## Development

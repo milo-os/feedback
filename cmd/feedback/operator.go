@@ -14,9 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"go.miloapis.com/feedback/internal/version"
+	"go.miloapis.com/feedback/internal/webhook"
 	feedbackv1alpha1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
 
@@ -86,11 +87,13 @@ func runOperator(o operatorOptions) error {
 		LeaderElectionNamespace:       o.leaderElectionNamespace,
 		LeaderElectionConfig:          localConfig,
 		LeaderElectionReleaseOnCancel: true,
-		WebhookServer:                 webhook.NewServer(webhook.Options{Port: o.webhookPort, CertDir: o.webhookCertDir}),
+		WebhookServer:                 ctrlwebhook.NewServer(ctrlwebhook.Options{Port: o.webhookPort, CertDir: o.webhookCertDir}),
 	})
 	if err != nil {
 		return fmt.Errorf("creating manager: %w", err)
 	}
+
+	webhook.Register(mgr)
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		return err

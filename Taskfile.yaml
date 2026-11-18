@@ -42,6 +42,7 @@ tasks:
     cmds:
       - "{{.TOOL_DIR}}/controller-gen object:headerFile=hack/boilerplate.go.txt paths=./pkg/apis/..."
       - "{{.TOOL_DIR}}/controller-gen crd paths=./pkg/apis/... output:crd:artifacts:config=config/crd/bases"
+      - "{{.TOOL_DIR}}/controller-gen webhook paths=./internal/webhook/... output:webhook:artifacts:config=config/milo/webhook"
 
   install-tools:
     desc: Install code generators into bin/

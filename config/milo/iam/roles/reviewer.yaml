@@ -1,0 +1,30 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: feedback.miloapis.com-reviewer
+  namespace: milo-system
+  labels:
+    app.kubernetes.io/name: reviewer
+    app.kubernetes.io/part-of: feedback.miloapis.com
+  annotations:
+    kubernetes.io/display-name: Feedback Reviewer
+    kubernetes.io/description: "Works the feedback queue: reads submissions, decides on them through their reviews (including moving misfiled ones to the security track), deletes spam, and hides posts. Cannot see security reports."
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: feedback.miloapis.com-viewer
+      namespace: milo-system
+  includedPermissions:
+    - feedback.miloapis.com/posts.update
+    - feedback.miloapis.com/posts.patch
+    - feedback.miloapis.com/submissions.get
+    - feedback.miloapis.com/submissions.list
+    - feedback.miloapis.com/submissions.watch
+    - feedback.miloapis.com/submissions.delete
+    - feedback.miloapis.com/submissions/status.get
+    - feedback.miloapis.com/submissionreviews.get
+    - feedback.miloapis.com/submissionreviews.list
+    - feedback.miloapis.com/submissionreviews.watch
+    - feedback.miloapis.com/submissionreviews.update
+    - feedback.miloapis.com/submissionreviews.patch
+    - feedback.miloapis.com/submissionreviews/status.get

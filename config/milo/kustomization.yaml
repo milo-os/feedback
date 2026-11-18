@@ -1,7 +1,11 @@
+# What the service registers in Milo: ProtectedResources and Roles (iam/),
+# Kubernetes RBAC for the service's own components (rbac/) and the admission
+# webhooks Milo calls (webhook/). The CRDs are in config/crd. bindings/ is
+# separate and optional: who holds the roles is the deployment's choice.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
-# Applied to Milo. The CRDs themselves are in config/crd; each CRD declares
-# its discovery contexts and access rules with annotations.
 components:
   - iam/
+  - rbac/
+  - webhook/

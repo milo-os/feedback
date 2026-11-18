@@ -6,6 +6,9 @@ metadata:
   labels:
     app.kubernetes.io/name: editor
     app.kubernetes.io/part-of: feedback.miloapis.com
+  annotations:
+    kubernetes.io/display-name: Feedback Editor
+    kubernetes.io/description: "Configures which GitHub repositories feed the roadmap, on top of viewer access."
 spec:
   launchStage: Alpha
   inheritedRoles:
