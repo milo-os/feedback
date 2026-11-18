@@ -1,0 +1,62 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: operator-readiness
+spec:
+  description: |
+    The operator reports ready only once its webhook server serves TLS, so
+    Milo's fail-closed webhooks never reach a pod that can't answer.
+
+      - The running operator's /readyz includes the webhook check.
+      - A fresh operator pod (the Deployment's pod template, with a label the
+        webhook Service doesn't select, and standing by for leadership) runs
+        next to a sampler that polls /readyz and the webhook port from the
+        moment the pod starts. /readyz must never answer 200 while the webhook
+        port doesn't complete a TLS handshake, and the pod must become Ready.
+  steps:
+    - name: running-operator
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              ip=$(infra -n feedback-system get pod -l app=feedback-operator -o jsonpath='{.items[0].status.podIP}')
+              out=$(infra -n feedback-system run e2e-readyz-probe --rm -i --restart=Never --quiet \
+                --image=curlimages/curl:8.11.1 -- curl -s "http://$ip:8081/readyz?verbose")
+              echo "$out"
+              grep -q '\[+\]webhook ok' <<<"$out" || fail "/readyz has no passing webhook check"
+
+    - name: fresh-pod
+      try:
+        - script:
+            shell: bash
+            timeout: 4m
+            content: |
+              . ../lib.sh
+              infra -n feedback-system get deployment feedback-operator -o json | jq '
+                .spec.template as $t | {
+                  apiVersion: "v1", kind: "Pod",
+                  metadata: {name: "e2e-operator-readiness", namespace: "feedback-system",
+                             labels: {app: "feedback-operator-e2e-readiness"}},
+                  spec: ($t.spec + {restartPolicy: "Never", containers: ([{
+                    name: "sampler", image: "curlimages/curl:8.11.1",
+                    securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}},
+                    command: ["sh", "-c", "i=0; while [ $i -lt 1500 ]; do r=$(curl -s -o /dev/null -m 1 -w %{http_code} http://localhost:8081/readyz); t=$(curl -sk -o /dev/null -m 1 -w %{http_code} https://localhost:9443/); echo \"sample readyz=$r tls=$t\"; i=$((i+1)); sleep 0.05; done; sleep 3600"]
+                  }] + $t.spec.containers)})
+                }' | infra apply -f -
+              infra -n feedback-system wait --for=condition=Ready pod/e2e-operator-readiness --timeout=180s
+              echo "ok: the fresh pod became Ready"
+              logs=$(infra -n feedback-system logs e2e-operator-readiness -c sampler)
+              total=$(grep -c '^sample' <<<"$logs" || true)
+              bad=$(grep -c 'readyz=200 tls=000' <<<"$logs" || true)
+              notready=$(grep -Ec 'readyz=(500|503) tls=000' <<<"$logs" || true)
+              ready=$(grep -c 'readyz=200 tls=404' <<<"$logs" || true)
+              echo "samples: $total; not ready while TLS refused: $notready; ready while TLS refused: $bad; ready and serving: $ready"
+              [ "$bad" = 0 ] || fail "/readyz answered 200 while the webhook port refused TLS"
+              [ "$ready" -gt 0 ] || fail "never saw /readyz 200 with the webhook serving"
+      cleanup:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              infra -n feedback-system delete pod e2e-operator-readiness --ignore-not-found --wait=false

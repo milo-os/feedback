@@ -1,0 +1,115 @@
+# e2e runs feedback in the test-infra kind cluster against the Milo that
+# Milo's own `task dev:deploy` puts there (`task e2e:up`). It differs from
+# core-control-plane only where the test environment has to:
+#
+#   - Identity. The operator and feedback-uploads authenticate to Milo with
+#     static tokens for their production usernames
+#     (system:feedback-operator@feedback.miloapis.com and
+#     system:feedback-uploads@feedback.miloapis.com), which
+#     hack/e2e/milo-identities.sh adds to Milo's token file, instead of client
+#     certificates from the datum-control-plane issuer. Milo's RBAC for them is
+#     config/milo/rbac, unchanged.
+#   - Trust. They verify Milo with its test CA (the milo-ca ConfigMap that
+#     hack/e2e/deploy.sh copies from Milo), and the webhook certificate comes
+#     from a self-signed CA here, whose bundle deploy.sh writes into the webhook
+#     configurations it registers in Milo.
+#   - Attachments live in MinIO in this namespace, through the s3-attachments
+#     component.
+#   - One replica each, and a 30s submission window so the rate limit test
+#     doesn't wait 10 minutes. The limit itself is the default.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: feedback-system
+
+resources:
+  - namespace.yaml
+  - ../../base
+  - certificates.yaml
+  - milo-kubeconfig.yaml
+  - minio.yaml
+
+components:
+  - ../../components/s3-attachments
+
+configMapGenerator:
+  - name: feedback-config
+    behavior: merge
+    literals:
+      - attachments-bucket=s3://feedback-attachments?endpoint=http://minio.feedback-system.svc.cluster.local:9000&region=us-east-1&use_path_style=true
+
+images:
+  - name: ghcr.io/milo-os/feedback
+    newTag: e2e
+
+patches:
+  - target:
+      kind: Deployment
+      name: feedback-operator
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --submission-window=30s
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --zap-log-level=debug
+      # The webhook certificate must be there; base leaves it optional.
+      - op: replace
+        path: /spec/template/spec/volumes/0/secret/optional
+        value: false
+  - target:
+      kind: Deployment
+      name: feedback-uploads
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: feedback-operator
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: feedback-operator
+      spec:
+        template:
+          spec:
+            containers:
+              - name: operator
+                volumeMounts:
+                  - {name: milo-kubeconfig, mountPath: /etc/kubernetes/milo, readOnly: true}
+                  - {name: milo-ca, mountPath: /etc/kubernetes/pki/trust, readOnly: true}
+            volumes:
+              - name: milo-kubeconfig
+                secret:
+                  secretName: feedback-operator-milo-kubeconfig
+              - name: milo-ca
+                configMap:
+                  name: milo-ca
+  - target:
+      kind: Deployment
+      name: feedback-uploads
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: feedback-uploads
+      spec:
+        template:
+          spec:
+            containers:
+              - name: uploads
+                volumeMounts:
+                  - {name: milo-kubeconfig, mountPath: /etc/kubernetes/milo, readOnly: true}
+                  - {name: milo-ca, mountPath: /etc/kubernetes/pki/trust, readOnly: true}
+            volumes:
+              - name: milo-kubeconfig
+                secret:
+                  secretName: feedback-uploads-milo-kubeconfig
+              - name: milo-ca
+                configMap:
+                  name: milo-ca

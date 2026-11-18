@@ -60,3 +60,9 @@ temp/
 .tmp
 # Personal workflow artifacts (specs/plans/runbooks from superpowers skill)
 docs/superpowers/
+
+# test-infra checkout and kubeconfig, and remote Taskfile cache, for task e2e:*
+.test-infra
+.task
+# test-infra installs kind here when the installed version differs from its pin
+/kind

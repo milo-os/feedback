@@ -180,6 +180,8 @@ config/samples/           an example of every resource
 hack/search-lag.sh        measures how long a post change takes to reach search
 hack/search-scope.sh      checks which Milo contexts can find a post in search
 test/config/              checks config/ against the CRDs
+test/e2e/                 Chainsaw end-to-end tests in kind (see End-to-end tests)
+hack/e2e/                 deploys the end-to-end environment
 ```
 
 ## Development
@@ -190,6 +192,71 @@ task test       # unit tests, plus CRD tests against an envtest API server
 task generate   # after changing types in pkg/apis: deepcopy and CRDs
 task docker-build
 ```
+
+### End-to-end tests
+
+`task e2e:up` builds a kind cluster from
+[datum-cloud/test-infra](https://github.com/datum-cloud/test-infra) (cert-manager,
+Envoy Gateway, Flux), deploys Milo into it from a Milo checkout, and installs
+feedback in that Milo. `task e2e:test` runs the [Chainsaw](https://kyverno.github.io/chainsaw/)
+tests in `test/e2e/` against it. Docker, kind, kubectl, kustomize, jq and yq
+must be installed.
+
+```bash
+task e2e:up MILO_DIR=../milo   # MILO_DIR defaults to a sibling ../milo
+task e2e:test                  # or: task e2e:test -- test/e2e/votes
+task e2e:redeploy              # rebuild feedback and restart it
+task e2e:down                  # deletes the kind cluster
+```
+
+`e2e:up` runs `e2e:cluster`, `e2e:milo` (Milo's own `dev:build`, `dev:load`
+and `dev:deploy`, then `e2e:milo-identities`), `e2e:build` and `e2e:deploy`;
+each can be run on its own. Milo answers on https://localhost:30443.
+
+What runs where:
+
+- **In Milo:** the CRDs, `config/milo/rbac` and the admission webhooks
+  (with the webhook CA as `caBundle`, since cert-manager can't inject into
+  Milo), and the `post-ref` admission policy from `config/milo/activity`.
+  `config/milo/iam` is checked with a server-side dry run only.
+- **In the cluster** (`config/overlays/e2e`): the operator and
+  `feedback-uploads` (one replica each), a self-signed webhook certificate
+  from cert-manager, MinIO as the attachments bucket through the
+  `s3-attachments` component, and in `milo-system` a stand-in for Milo's
+  audit log processor that logs the audit events Milo sends it.
+- **Identities:** `hack/e2e/milo-identities.sh` adds static tokens to Milo's
+  token file (`config/overlays/e2e/milo/tokens.csv`) for
+  `system:feedback-operator@feedback.miloapis.com`,
+  `system:feedback-uploads@feedback.miloapis.com` and
+  `system:feedback-sync@feedback.miloapis.com` (production uses client
+  certificates for the same usernames), and for `other-user`, `limit-user`,
+  `staff-user` and `security-user` besides Milo's `test-user`.
+
+test-infra's Milo authorizes with Kubernetes RBAC, not Milo IAM. The tests
+grant the IAM roles' permissions as ClusterRoles instead
+(`hack/e2e/iam-rbac.sh`): `feedback.miloapis.com-user` to every signed-in
+user, `-reviewer` to `staff-user` and `-security-team` to `security-user`.
+RBAC can't scope a grant to a user's own context, so the tests don't cover
+what Milo IAM decides by context: for example, that a user can't act in
+another user's context, or read a submission's attachments in the platform
+context.
+
+| Test | What it checks |
+| --- | --- |
+| `votes` | owner webhook, `<post>.<user>` names, owner filtering, follows, vote totals, post named in delete audit events |
+| `hidden-posts` | hidden posts invisible to users, visible to staff, no votes on them |
+| `merge-chain` | votes moved along merge chains; a hidden target keeps them, with a condition and no hot loop |
+| `submissions` | review created, reviewer recorded, Rejected and Approved carried out |
+| `rate-limit` | 429 after the submission limit (`--submission-window=30s` here) |
+| `attachments` | upload, attach, copy, download and delete through `feedback-uploads` and MinIO, called from inside the cluster |
+| `security` | MoveToSecurity leaves an unrelated report with the target name alone, then moves once it's gone |
+| `operator-readiness` | the operator isn't ready before its webhook server serves TLS |
+
+Not covered: `feedback-sync` and GitHub (the tests write posts with sync's
+identity), Milo IAM, activity and search (their services don't run in
+test-infra), notifications and digests.
+
+### Running the operator by hand
 
 Run the operator against a Milo you can reach, in a container:
 

@@ -1,0 +1,26 @@
+# What hack/e2e/deploy.sh applies to Milo besides the CRDs (config/crd): the
+# Kubernetes RBAC for feedback's components and the admission webhooks, as in
+# production, plus the e2e users and their roles.
+#
+# test-infra's Milo authorizes with RBAC, not Milo IAM, so config/milo/iam
+# (ProtectedResources and Roles) and config/milo/bindings don't grant
+# anything there. Instead hack/e2e/iam-rbac.sh turns each IAM role in
+# config/milo/iam/roles into a ClusterRole named feedback-e2e:<role> with the
+# same permissions, and users.yaml binds them:
+#
+#   feedback.miloapis.com-user      every signed-in user (production binds it
+#                                   in each user's own context only)
+#   feedback.miloapis.com-reviewer  staff-user
+#   feedback.miloapis.com-security-team  security-user
+#
+# RBAC can't tell a user's own context from another's or from the platform
+# context, so what Milo IAM scopes by context isn't exercised here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - users.yaml
+
+components:
+  - ../../../milo/rbac
+  - ../../../milo/webhook

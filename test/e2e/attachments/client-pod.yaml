@@ -1,0 +1,23 @@
+# A client in the cluster, to call feedback-uploads through its Service.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: e2e-attachments-client
+  namespace: feedback-system
+  labels:
+    app.kubernetes.io/part-of: feedback-e2e
+spec:
+  terminationGracePeriodSeconds: 0
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: curl
+      image: curlimages/curl:8.11.1
+      command: [sleep, "3600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
