@@ -1,0 +1,12 @@
+# Static tokens the e2e harness adds to Milo's token file (token,user,uid,"groups").
+# Test values for the local kind cluster only.
+#
+# feedback's components, with their production usernames.
+e2e-feedback-operator-token,system:feedback-operator@feedback.miloapis.com,feedback-operator
+e2e-feedback-uploads-token,system:feedback-uploads@feedback.miloapis.com,feedback-uploads
+e2e-feedback-sync-token,system:feedback-sync@feedback.miloapis.com,feedback-sync
+# Users besides Milo's own test-user (test-user-token).
+e2e-other-user-token,other-user,other-user,"system:authenticated"
+e2e-limit-user-token,limit-user,limit-user,"system:authenticated"
+e2e-staff-token,staff-user,staff-user,"system:authenticated"
+e2e-security-token,security-user,security-user,"system:authenticated"

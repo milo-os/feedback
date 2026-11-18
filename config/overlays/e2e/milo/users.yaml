@@ -1,0 +1,76 @@
+# The e2e users (tokens in tokens.csv) and what they may do with feedback.
+# The ClusterRoles come from config/milo/iam/roles; see kustomization.yaml.
+apiVersion: iam.miloapis.com/v1alpha1
+kind: User
+metadata:
+  name: other-user
+spec:
+  email: other-user@test.local
+  givenName: Other
+  familyName: User
+---
+apiVersion: iam.miloapis.com/v1alpha1
+kind: User
+metadata:
+  name: limit-user
+spec:
+  email: limit-user@test.local
+  givenName: Limit
+  familyName: User
+---
+apiVersion: iam.miloapis.com/v1alpha1
+kind: User
+metadata:
+  name: staff-user
+spec:
+  email: staff-user@test.local
+  givenName: Staff
+  familyName: User
+---
+apiVersion: iam.miloapis.com/v1alpha1
+kind: User
+metadata:
+  name: security-user
+spec:
+  email: security-user@test.local
+  givenName: Security
+  familyName: User
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: feedback-e2e:user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: feedback-e2e:feedback.miloapis.com-user
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:authenticated
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: feedback-e2e:reviewer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: feedback-e2e:feedback.miloapis.com-reviewer
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: staff-user
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: feedback-e2e:security-team
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: feedback-e2e:feedback.miloapis.com-security-team
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: security-user

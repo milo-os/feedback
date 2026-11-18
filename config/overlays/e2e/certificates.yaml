@@ -1,0 +1,51 @@
+# A self-signed CA for the operator's webhook certificate. Milo can't use
+# cert-manager's CA injector, so hack/e2e/deploy.sh copies the CA into the
+# webhook configurations it registers in Milo.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: feedback-e2e-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: feedback-e2e-ca
+spec:
+  isCA: true
+  commonName: feedback e2e webhook CA
+  secretName: feedback-e2e-ca
+  duration: 87600h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: feedback-e2e-selfsigned
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: feedback-e2e-ca
+spec:
+  ca:
+    secretName: feedback-e2e-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: feedback-operator-webhook
+spec:
+  secretName: feedback-operator-webhook-cert
+  commonName: feedback-operator-webhook
+  dnsNames:
+    - feedback-operator-webhook.feedback-system.svc
+    - feedback-operator-webhook.feedback-system.svc.cluster.local
+  duration: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: feedback-e2e-ca
+    kind: Issuer

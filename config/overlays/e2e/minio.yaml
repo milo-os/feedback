@@ -1,0 +1,83 @@
+# MinIO as the S3-compatible attachments bucket, with the
+# feedback-attachments bucket made by the minio-bucket Job (hack/e2e/deploy.sh
+# runs it). The credentials are test values; the s3-attachments component
+# gives them to the operator and feedback-uploads. MinIO no longer publishes
+# images on Docker Hub or Quay, so these are Chainguard's builds, pinned by
+# digest.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: feedback-attachments-s3
+stringData:
+  AWS_ACCESS_KEY_ID: feedback-e2e
+  AWS_SECRET_ACCESS_KEY: feedback-e2e-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: minio
+          image: chainguard/minio@sha256:68aab277f9748c7c3eb85f178744adba1655c8e33a86987b22d2879ca507c332
+          args: [server, /data]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef: {name: feedback-attachments-s3, key: AWS_ACCESS_KEY_ID}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: feedback-attachments-s3, key: AWS_SECRET_ACCESS_KEY}
+          ports:
+            - {name: s3, containerPort: 9000}
+          readinessProbe:
+            httpGet: {path: /minio/health/ready, port: s3}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+spec:
+  selector:
+    app: minio
+  ports:
+    - {name: s3, port: 9000, targetPort: s3}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-bucket
+spec:
+  backoffLimit: 20
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: chainguard/minio-client@sha256:43a0d3eae573e611d6b07a13255e3c4f4161220232fbcfb9951d8910b9a72331
+          args: [mb, --ignore-existing, local/feedback-attachments]
+          env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/mc
+            - name: MC_HOST_local
+              value: http://feedback-e2e:feedback-e2e-secret@minio.feedback-system.svc.cluster.local:9000

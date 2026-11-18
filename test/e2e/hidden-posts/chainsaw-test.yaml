@@ -1,0 +1,65 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: hidden-posts
+spec:
+  description: |
+    Hidden posts (spec.hidden, iam.miloapis.com/hidden-field): staff-user, a
+    reviewer, hides a post. test-user can't list, get or vote on it, in their
+    own context or the platform context. Staff and admin still see it.
+  steps:
+    - name: hide
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              post e2e-hidden-shown
+              post e2e-hidden-secret
+              expect 200 "staff-user hides a post" staff-user PATCH "$(url platform posts/e2e-hidden-secret)" '{"spec":{"hidden":true}}'
+              # Only spec.hidden is for staff to change.
+              code=$(call staff-user PATCH "$(url platform posts/e2e-hidden-shown/status)" '{"status":{"title":"renamed"}}')
+              [ "$code" = 403 ] || fail "staff-user wrote a post's status: HTTP $code"
+              echo "ok: staff-user can't write a post's status (403)"
+      cleanup:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              cleanup_posts e2e-hidden-shown e2e-hidden-secret
+
+    - name: users-dont-see-it
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              for ctx in test-user platform; do
+                expect 200 "test-user lists posts ($ctx)" test-user GET "$(url $ctx posts)"
+                names=$(jqo '[.items[].metadata.name | select(startswith("e2e-hidden-"))] | sort | join(" ")')
+                [ "$names" = e2e-hidden-shown ] || fail "test-user listed in $ctx: $names"
+                expect 200 "test-user lists hidden posts by field selector ($ctx)" test-user GET "$(url $ctx 'posts?fieldSelector=spec.hidden%3Dtrue')"
+                [ "$(jqo '[.items[].metadata.name | select(. == "e2e-hidden-secret")] | length')" = 0 ] || fail "hidden post listed by field selector in $ctx"
+                expect 404 "test-user gets the hidden post ($ctx)" test-user GET "$(url $ctx posts/e2e-hidden-secret)"
+                expect 200 "test-user gets the shown post ($ctx)" test-user GET "$(url $ctx posts/e2e-hidden-shown)"
+              done
+              expect 403 "test-user votes on the hidden post" test-user POST "$(url test-user votes)" \
+                '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Vote","metadata":{"name":"e2e-hidden-secret.test-user"},"spec":{"postRef":{"name":"e2e-hidden-secret"}}}'
+              grep -q 'not found' "$OUT" || fail "refusal says more than not found: $(cat $OUT)"
+              expect 403 "test-user follows the hidden post" test-user POST "$(url test-user subscriptions)" \
+                '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Subscription","metadata":{"name":"e2e-hidden-secret.test-user"},"spec":{"postRef":{"name":"e2e-hidden-secret"},"reason":"manual"}}'
+
+    - name: staff-see-it
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              expect 200 "staff-user gets the hidden post" staff-user GET "$(url platform posts/e2e-hidden-secret)"
+              [ "$(jqo .spec.hidden)" = true ] || fail "staff-user got: $(cat $OUT)"
+              expect 200 "staff-user lists posts" staff-user GET "$(url platform posts)"
+              [ "$(jqo '[.items[].metadata.name | select(. == "e2e-hidden-secret")] | length')" = 1 ] || fail "staff-user doesn't list the hidden post"
+              expect 200 "admin gets the hidden post" admin GET "$(url platform posts/e2e-hidden-secret)"
+
+              expect 200 "staff-user shows the post again" staff-user PATCH "$(url platform posts/e2e-hidden-secret)" '{"spec":{"hidden":false}}'
+              expect 200 "test-user gets it once shown" test-user GET "$(url test-user posts/e2e-hidden-secret)"
