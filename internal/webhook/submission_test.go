@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,8 +13,11 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"go.miloapis.com/feedback/internal/identity"
 	"go.miloapis.com/feedback/internal/index"
@@ -94,90 +96,169 @@ func TestReviewCheck(t *testing.T) {
 	}
 }
 
+// limitFixture is a SubmissionCheck with an empty cache and a record of
+// admissions, and a way to make requests from u1.
+type limitFixture struct {
+	t    *testing.T
+	subs client.Client
+	c    SubmissionCheck
+	now  time.Time
+}
+
+func newLimitFixture(t *testing.T, limit int, now time.Time) *limitFixture {
+	scheme := runtime.NewScheme()
+	_ = v1.AddToScheme(scheme)
+	f := &limitFixture{t: t, now: now}
+	f.subs = fake.NewClientBuilder().WithScheme(scheme).
+		WithIndex(&v1.Submission{}, index.Owner, func(o client.Object) []string { return []string{o.(*v1.Submission).Spec.UserRef.Name} }).
+		Build()
+	f.c = SubmissionCheck{Submissions: f.subs, Limit: limit, Window: 10 * time.Minute, Now: func() time.Time { return f.now }, Admitted: NewAdmitted()}
+	return f
+}
+
+// req is a create of a submission with uid, as the API server sends it to
+// validating admission: the UID is already set.
+func (f *limitFixture) req(uid string, dryRun bool) admission.Request {
+	u := inUserContext("u1")
+	u.Extra[identity.EmailVerifiedExtraKey] = authenticationv1.ExtraValue{"true"}
+	sub := &v1.Submission{ObjectMeta: metav1.ObjectMeta{UID: types.UID(uid)},
+		Spec: v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}, Kind: v1.SubmissionKindIdea, Title: "t", Body: "b"}}
+	r := request(f.t, admissionv1.Create, "submissions", u, sub, nil)
+	if dryRun {
+		r.DryRun = ptr.To(true)
+	}
+	return r
+}
+
+func (f *limitFixture) allowed(uid string) bool {
+	return f.c.Handle(context.Background(), f.req(uid, false)).Allowed
+}
+
+// store puts a submission in the cache, as the API server stored it.
+func (f *limitFixture) store(uid string, created time.Time) {
+	f.t.Helper()
+	if err := f.subs.Create(context.Background(), &v1.Submission{
+		ObjectMeta: metav1.ObjectMeta{Name: "s-" + uid, UID: types.UID(uid), CreationTimestamp: metav1.NewTime(created)},
+		Spec:       v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}},
+	}); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
 // TestSubmissionLimitHoldsForParallelRequests checks that requests racing the
 // cache on one replica can't all get through: the cache shows none of them.
 func TestSubmissionLimitHoldsForParallelRequests(t *testing.T) {
 	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
-	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
-	subs := fake.NewClientBuilder().WithScheme(scheme).
-		WithIndex(&v1.Submission{}, index.Owner, func(o client.Object) []string { return []string{o.(*v1.Submission).Spec.UserRef.Name} }).
-		Build()
-	c := SubmissionCheck{Submissions: subs, Limit: 3, Window: 10 * time.Minute, Now: func() time.Time { return now }, Admitted: NewAdmitted()}
-	u := inUserContext("u1")
-	u.Extra[identity.EmailVerifiedExtraKey] = authenticationv1.ExtraValue{"true"}
-	sub := &v1.Submission{Spec: v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}, Kind: v1.SubmissionKindIdea, Title: "t", Body: "b"}}
-	req := request(t, admissionv1.Create, "submissions", u, sub, nil)
+	f := newLimitFixture(t, 3, now)
 
 	var wg sync.WaitGroup
-	var allowed atomic.Int32
-	for range 20 {
+	var mu sync.Mutex
+	var admittedUIDs []string
+	for i := range 20 {
+		uid := fmt.Sprintf("p%d", i)
+		req := f.req(uid, false)
 		wg.Go(func() {
-			if c.Handle(context.Background(), req).Allowed {
-				allowed.Add(1)
+			if f.c.Handle(context.Background(), req).Allowed {
+				mu.Lock()
+				admittedUIDs = append(admittedUIDs, uid)
+				mu.Unlock()
 			}
 		})
 	}
 	wg.Wait()
-	if got := allowed.Load(); got != 3 {
-		t.Errorf("%d of 20 parallel submissions allowed, want 3", got)
+	if len(admittedUIDs) != 3 {
+		t.Fatalf("%d of 20 parallel submissions allowed, want 3", len(admittedUIDs))
 	}
 
 	// Once the cache shows the admitted submissions, they aren't counted
 	// twice.
-	for i := range 3 {
-		_ = subs.Create(context.Background(), &v1.Submission{
-			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("s%d", i), CreationTimestamp: metav1.NewTime(now.Add(time.Second))},
-			Spec:       v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}},
-		})
+	for _, uid := range admittedUIDs {
+		f.store(uid, now)
 	}
-	var cached v1.SubmissionList
-	if err := subs.List(context.Background(), &cached); err != nil || len(cached.Items) != 3 || !cached.Items[0].CreationTimestamp.Equal(&metav1.Time{Time: now.Add(time.Second)}) {
-		t.Fatalf("cache fixture: %v %+v", err, cached.Items)
-	}
-	c.Limit = 4
-	c.Now = func() time.Time { return now.Add(2 * time.Second) }
-	if !c.Handle(context.Background(), req).Allowed {
+	f.c.Limit = 4
+	f.now = now.Add(2 * time.Second)
+	if !f.allowed("p20") {
 		t.Error("fourth submission denied with a limit of 4")
 	}
-	if c.Handle(context.Background(), req).Allowed {
+	if f.allowed("p21") {
 		t.Error("fifth submission allowed with a limit of 4")
 	}
 }
 
-// TestSubmissionLimitCountsSameSecondOnce covers an admission and its
-// submission in the same second: creationTimestamp has whole seconds, so the
-// submission looks older than its own admission, and it must not count
-// twice.
-func TestSubmissionLimitCountsSameSecondOnce(t *testing.T) {
-	second := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
-	scheme := runtime.NewScheme()
-	_ = v1.AddToScheme(scheme)
-	subs := fake.NewClientBuilder().WithScheme(scheme).
-		WithIndex(&v1.Submission{}, index.Owner, func(o client.Object) []string { return []string{o.(*v1.Submission).Spec.UserRef.Name} }).
-		Build()
-	now := second.Add(500 * time.Millisecond)
-	c := SubmissionCheck{Submissions: subs, Limit: 2, Window: 10 * time.Minute, Now: func() time.Time { return now }, Admitted: NewAdmitted()}
-	u := inUserContext("u1")
-	u.Extra[identity.EmailVerifiedExtraKey] = authenticationv1.ExtraValue{"true"}
-	req := request(t, admissionv1.Create, "submissions", u,
-		&v1.Submission{Spec: v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}, Kind: v1.SubmissionKindIdea, Title: "t", Body: "b"}}, nil)
+// TestSubmissionLimitCountsEachSubmissionOnce covers a submission whose
+// creationTimestamp is in an earlier second than its admission: the API
+// server sets it before calling admission, and it has whole seconds. The
+// cached submission and the record of its admission must count once.
+func TestSubmissionLimitCountsEachSubmissionOnce(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		admitted time.Time
+		created  time.Time
+	}{
+		{"same second", time.Date(2026, 11, 17, 12, 0, 0, 500e6, time.UTC), time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)},
+		{"across a second boundary", time.Date(2026, 11, 17, 12, 0, 1, 20e6, time.UTC), time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newLimitFixture(t, 2, tc.admitted)
+			if !f.allowed("a") {
+				t.Fatal("first submission denied")
+			}
+			f.store("a", tc.created)
+			f.now = tc.admitted.Add(200 * time.Millisecond)
+			if !f.allowed("b") {
+				t.Error("second submission denied with a limit of 2: the first counted twice")
+			}
+			if f.allowed("c") {
+				t.Error("third submission allowed with a limit of 2")
+			}
+		})
+	}
+}
 
-	if !c.Handle(context.Background(), req).Allowed {
+// TestSubmissionLimitIgnoresDryRuns checks a dry run is limited like a real
+// create but doesn't use up the limit, since it creates nothing.
+func TestSubmissionLimitIgnoresDryRuns(t *testing.T) {
+	f := newLimitFixture(t, 1, time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC))
+	for range 3 {
+		if !f.c.Handle(context.Background(), f.req("dry", true)).Allowed {
+			t.Fatal("dry run denied")
+		}
+	}
+	if !f.allowed("a") {
+		t.Fatal("first real submission denied after dry runs")
+	}
+	if f.c.Handle(context.Background(), f.req("dry2", true)).Allowed {
+		t.Error("dry run over the limit allowed")
+	}
+}
+
+// TestSubmissionLimitForgetsFailedCreates covers a create that fails after
+// admission: its submission never reaches the cache, and it stops counting
+// after PendingTTL rather than for the whole window.
+func TestSubmissionLimitForgetsFailedCreates(t *testing.T) {
+	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	f := newLimitFixture(t, 1, now)
+	if !f.allowed("failed") {
 		t.Fatal("first submission denied")
 	}
-	// The API server stores it with the second the admission happened in.
-	if err := subs.Create(context.Background(), &v1.Submission{
-		ObjectMeta: metav1.ObjectMeta{Name: "s1", CreationTimestamp: metav1.NewTime(second)},
-		Spec:       v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}},
-	}); err != nil {
-		t.Fatal(err)
+	f.now = now.Add(PendingTTL - time.Second)
+	if f.allowed("b") {
+		t.Error("second submission allowed while the first may still be on its way")
 	}
-	now = second.Add(700 * time.Millisecond)
-	if !c.Handle(context.Background(), req).Allowed {
-		t.Error("second submission denied with a limit of 2: the first counted twice")
+	f.now = now.Add(PendingTTL)
+	if !f.allowed("b") {
+		t.Error("second submission denied after the first never appeared")
 	}
-	if c.Handle(context.Background(), req).Allowed {
-		t.Error("third submission allowed with a limit of 2")
+}
+
+// TestSubmissionLimitCountsRepeatedAdmissionOnce covers the API server
+// sending the same create to admission twice: it's one submission.
+func TestSubmissionLimitCountsRepeatedAdmissionOnce(t *testing.T) {
+	f := newLimitFixture(t, 1, time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC))
+	if !f.allowed("a") || !f.allowed("a") {
+		t.Fatal("the same create denied the second time")
+	}
+	if f.allowed("b") {
+		t.Error("a second submission allowed with a limit of 1")
 	}
 }
