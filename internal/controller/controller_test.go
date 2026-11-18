@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"go.miloapis.com/feedback/internal/attachments"
 	"go.miloapis.com/feedback/internal/index"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
 )
@@ -46,7 +47,7 @@ func (c *clock) Set(t time.Time) {
 
 // start runs the reconcilers against an envtest API server with the CRDs,
 // and returns a client that reads straight from the API server.
-func start(t *testing.T, now *clock) client.Client {
+func start(t *testing.T, now *clock, files ...*attachments.Store) client.Client {
 	t.Helper()
 	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
 		t.Skip("KUBEBUILDER_ASSETS not set; run with task test")
@@ -78,7 +79,11 @@ func start(t *testing.T, now *clock) client.Client {
 	if err := index.Add(ctx, mgr); err != nil {
 		t.Fatal(err)
 	}
-	if err := Setup(ctx, mgr, Options{Users: fakeUsers{}, Now: now.Now}); err != nil {
+	o := Options{Users: fakeUsers{}, Now: now.Now}
+	if len(files) > 0 {
+		o.Files = files[0]
+	}
+	if err := Setup(ctx, mgr, o); err != nil {
 		t.Fatal(err)
 	}
 	go func() { _ = mgr.Start(ctx) }()
@@ -395,5 +400,49 @@ func TestSubmissionReviews(t *testing.T) {
 		if len(r.OwnerReferences) != 1 || r.OwnerReferences[0].Name != "sub-new" {
 			t.Errorf("owner references %v", r.OwnerReferences)
 		}
+	})
+}
+
+func TestSubmissionAttachments(t *testing.T) {
+	ctx := context.Background()
+	files, err := attachments.Open(ctx, "mem://")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := start(t, &clock{now: time.Now()}, files)
+	ref, _, err := files.Upload(ctx, attachments.Submission, "u1", "notes.txt", "text/plain", []byte("hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := &v1.Submission{
+		ObjectMeta: metav1.ObjectMeta{Name: "sub-files"},
+		Spec: v1.SubmissionSpec{UserRef: v1.UserReference{Name: "u1"}, Kind: v1.SubmissionKindBug, Title: "t", Body: "b",
+			Attachments: []v1.AttachmentReference{{UploadRef: ref}}},
+	}
+	if err := c.Create(ctx, sub); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "copied", func() error {
+		if err := c.Get(ctx, client.ObjectKeyFromObject(sub), sub); err != nil {
+			return err
+		}
+		if len(sub.Finalizers) != 1 {
+			return errorf("no finalizer")
+		}
+		// Read without the owner, so only the copy counts.
+		_, err := files.Get(ctx, attachments.Submission, sub.Name, "", ref)
+		return err
+	})
+	if err := c.Delete(ctx, sub); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "deleted", func() error {
+		if err := c.Get(ctx, client.ObjectKeyFromObject(sub), &v1.Submission{}); !apierrors.IsNotFound(err) {
+			return errorf("submission still there")
+		}
+		if _, err := files.Get(ctx, attachments.Submission, sub.Name, "", ref); err == nil {
+			return errorf("file still there")
+		}
+		return nil
 	})
 }

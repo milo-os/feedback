@@ -18,9 +18,10 @@ const (
 
 // Keys Milo sets in user extras.
 const (
-	ParentKindExtraKey    = "iam.miloapis.com/parent-type"
-	ParentNameExtraKey    = "iam.miloapis.com/parent-name"
-	EmailVerifiedExtraKey = "iam.miloapis.com/emailVerified"
+	ParentAPIGroupExtraKey = "iam.miloapis.com/parent-api-group"
+	ParentKindExtraKey     = "iam.miloapis.com/parent-type"
+	ParentNameExtraKey     = "iam.miloapis.com/parent-name"
+	EmailVerifiedExtraKey  = "iam.miloapis.com/emailVerified"
 )
 
 // ParentKindUser is the parent kind of requests in a user's own context.

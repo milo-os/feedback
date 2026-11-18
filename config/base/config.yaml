@@ -1,0 +1,10 @@
+# Settings the environment overrides.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feedback-config
+data:
+  # Bucket URL for attachments, shared by the operator and feedback-uploads:
+  # gs://BUCKET, or s3://BUCKET?... for S3 and S3-compatible stores (see the
+  # s3-attachments component).
+  attachments-bucket: mem://

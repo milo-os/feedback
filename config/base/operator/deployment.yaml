@@ -41,8 +41,14 @@ spec:
         - --leader-elect
         - --leader-election-namespace=$(POD_NAMESPACE)
         - --webhook-cert-dir=/etc/kubernetes/pki/webhook
+        - --attachments-bucket=$(ATTACHMENTS_BUCKET)
         - --zap-encoder=json
         env:
+        - name: ATTACHMENTS_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: feedback-config
+              key: attachments-bucket
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

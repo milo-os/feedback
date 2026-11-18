@@ -12,6 +12,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"go.miloapis.com/feedback/internal/attachments"
 	"go.miloapis.com/feedback/internal/milo"
 )
 
@@ -25,6 +26,8 @@ type Options struct {
 	Users milo.Users
 	// Now returns the current time; tests replace it.
 	Now func() time.Time
+	// Files is the attachments bucket. Nil leaves attachments alone.
+	Files *attachments.Store
 }
 
 func (o Options) now() time.Time {
@@ -42,7 +45,7 @@ func Setup(ctx context.Context, mgr ctrl.Manager, o Options) error {
 		&PostVotesReconciler{Client: c, Options: o},
 		&VoteReconciler{Client: c, Options: o},
 		&MergeReconciler{Client: c},
-		&SubmissionReconciler{Client: c},
+		&SubmissionReconciler{Client: c, Files: o.Files},
 		&ReviewReconciler{Client: c},
 	} {
 		if err := r.SetupWithManager(mgr); err != nil {
