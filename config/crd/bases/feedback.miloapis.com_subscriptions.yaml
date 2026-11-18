@@ -1,0 +1,110 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+    discovery.miloapis.com/parent-contexts: Platform;User
+    iam.miloapis.com/owner-field: spec.userRef.name
+  name: subscriptions.feedback.miloapis.com
+spec:
+  group: feedback.miloapis.com
+  names:
+    kind: Subscription
+    listKind: SubscriptionList
+    plural: subscriptions
+    singular: subscription
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.postRef.name
+      name: Post
+      type: string
+    - jsonPath: .spec.userRef.name
+      name: User
+      priority: 1
+      type: string
+    - jsonPath: .spec.reason
+      name: Reason
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Subscription links a user to a post they follow. The operator creates one
+          when a user votes or their submission is approved or merged; users create
+          and delete their own in the user context. Named like a Vote.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SubscriptionSpec identifies the post and the follower.
+            properties:
+              postRef:
+                description: PostReference names a Post.
+                properties:
+                  name:
+                    description: Name of the Post, e.g. datum-cloud.enhancements.912.
+                    maxLength: 200
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              reason:
+                description: |-
+                  Reason is "manual" when the user follows a post themselves; the operator
+                  sets the others.
+                enum:
+                - voted
+                - submitted
+                - merged
+                - manual
+                type: string
+              userRef:
+                description: UserRef is the follower, set by the admission webhook.
+                properties:
+                  name:
+                    maxLength: 63
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - postRef
+            - userRef
+            type: object
+            x-kubernetes-validations:
+            - message: spec is immutable
+              rule: self == oldSelf
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: metadata.name must be <spec.postRef.name>.<spec.userRef.name>
+          rule: self.metadata.name == self.spec.postRef.name + '.' + self.spec.userRef.name
+    selectableFields:
+    - jsonPath: .spec.userRef.name
+    - jsonPath: .spec.postRef.name
+    served: true
+    storage: true
+    subresources: {}

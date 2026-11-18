@@ -4,34 +4,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// PostStatus is the public status of a post, derived from the Enhancements
-// project's Status field and the issue state.
-type PostStatus string
-
-const (
-	PostStatusNone       PostStatus = "none"
-	PostStatusBacklog    PostStatus = "backlog"
-	PostStatusPlanning   PostStatus = "planning"
-	PostStatusOnDeck     PostStatus = "on-deck"
-	PostStatusInProgress PostStatus = "in-progress"
-	PostStatusShipped    PostStatus = "shipped"
-	PostStatusClosed     PostStatus = "closed"
-)
-
-// ValidPostStatuses lists every PostStatus value.
-var ValidPostStatuses = []PostStatus{
-	PostStatusNone,
-	PostStatusBacklog,
-	PostStatusPlanning,
-	PostStatusOnDeck,
-	PostStatusInProgress,
-	PostStatusShipped,
-	PostStatusClosed,
-}
-
-// +genclient
-// +genclient:nonNamespaced
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:metadata:annotations="discovery.miloapis.com/parent-contexts=Platform"
+// +kubebuilder:printcolumn:name="Org",type=string,JSONPath=`.spec.github.org`
+// +kubebuilder:printcolumn:name="Last reconcile",type=date,JSONPath=`.status.lastReconcile.completedAt`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // FeedbackSource configures what the feedback service syncs from one GitHub
 // organization and how GitHub fields map onto posts. There is one per org.
@@ -53,7 +32,7 @@ type FeedbackSourceSpec struct {
 	// StatusMapping maps Enhancements project Status option names to post
 	// statuses. The empty key matches items with no Status set.
 	// +optional
-	StatusMapping map[string]PostStatus `json:"statusMapping,omitempty"`
+	StatusMapping map[string]PostState `json:"statusMapping,omitempty"`
 
 	// CategoryMapping maps GitHub label names to post categories.
 	// +optional
@@ -174,7 +153,7 @@ type RateLimitStatus struct {
 	ResetAt   metav1.Time `json:"resetAt"`
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
 
 // FeedbackSourceList is a list of FeedbackSource.
 type FeedbackSourceList struct {

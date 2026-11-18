@@ -1,0 +1,19 @@
+# The feedback CRDs. They are installed in Milo, not in the cluster the
+# operator runs in.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - bases/feedback.miloapis.com_feedbacksources.yaml
+  - bases/feedback.miloapis.com_posts.yaml
+  - bases/feedback.miloapis.com_releases.yaml
+  - bases/feedback.miloapis.com_changelogentries.yaml
+  - bases/feedback.miloapis.com_votes.yaml
+  - bases/feedback.miloapis.com_subscriptions.yaml
+  - bases/feedback.miloapis.com_submissions.yaml
+  - bases/feedback.miloapis.com_submissionreviews.yaml
+  - bases/feedback.miloapis.com_securityreports.yaml
+  - bases/feedback.miloapis.com_securityreporttriages.yaml
+  - bases/feedback.miloapis.com_securityacknowledgements.yaml
+  - bases/feedback.miloapis.com_feedbackprofiles.yaml
+  - bases/feedback.miloapis.com_feedbackdigests.yaml

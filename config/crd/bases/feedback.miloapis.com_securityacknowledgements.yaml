@@ -1,0 +1,80 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+    discovery.miloapis.com/parent-contexts: Platform
+  name: securityacknowledgements.feedback.miloapis.com
+spec:
+  group: feedback.miloapis.com
+  names:
+    kind: SecurityAcknowledgement
+    listKind: SecurityAcknowledgementList
+    plural: securityacknowledgements
+    singular: securityacknowledgement
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.name
+      name: Name
+      type: string
+    - jsonPath: .status.month
+      name: Month
+      type: string
+    - jsonPath: .status.severity
+      name: Severity
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          SecurityAcknowledgement is a public credit for a fixed or disclosed
+          SecurityReport whose reporter chose public credit, with the same name as
+          the report. The operator creates and updates it; it holds only what the
+          acknowledgements page shows.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          status:
+            description: SecurityAcknowledgementStatus is the public credit.
+            properties:
+              month:
+                description: Month is when the report was fixed, as YYYY-MM.
+                type: string
+              name:
+                type: string
+              severity:
+                description: Severity is the Security Team's rating.
+                enum:
+                - critical
+                - high
+                - medium
+                - low
+                - informational
+                type: string
+              url:
+                type: string
+            required:
+            - month
+            - name
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

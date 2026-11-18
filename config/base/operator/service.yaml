@@ -1,0 +1,26 @@
+# Milo calls the admission webhooks through this Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: feedback-operator-webhook
+spec:
+  selector:
+    app: feedback-operator
+  ports:
+  - name: webhook
+    port: 443
+    targetPort: webhook
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: feedback-operator-metrics
+  labels:
+    app: feedback-operator
+spec:
+  selector:
+    app: feedback-operator
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics

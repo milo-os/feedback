@@ -1,0 +1,204 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+    discovery.miloapis.com/parent-contexts: Platform;User
+    iam.miloapis.com/owner-field: spec.userRef.name
+  name: submissions.feedback.miloapis.com
+spec:
+  group: feedback.miloapis.com
+  names:
+    kind: Submission
+    listKind: SubmissionList
+    plural: submissions
+    singular: submission
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.kind
+      name: Kind
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.title
+      name: Title
+      type: string
+    - jsonPath: .spec.userRef.name
+      name: User
+      priority: 1
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Submission is private feedback waiting for a staff decision. Submitters
+          create and read their own in the user context; staff list them in the
+          platform context and decide on its SubmissionReview. It holds only what the
+          submitter may see. Nothing in a submission reaches GitHub unless staff
+          approve it, and then only the staff-edited public title and body.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SubmissionSpec is what the user submitted.
+            properties:
+              attachments:
+                description: Attachments reference files uploaded to feedback-uploads.
+                items:
+                  description: AttachmentReference points at a file uploaded to feedback-uploads.
+                  properties:
+                    contentType:
+                      description: |-
+                        ContentType is the file's media type. Set by the admission webhook from
+                        the upload.
+                      maxLength: 255
+                      type: string
+                    name:
+                      description: |-
+                        Name is the file name shown to reviewers. Set by the admission webhook
+                        from the upload.
+                      maxLength: 255
+                      type: string
+                    uploadRef:
+                      description: UploadRef is the reference feedback-uploads returned.
+                      maxLength: 128
+                      minLength: 1
+                      type: string
+                  required:
+                  - uploadRef
+                  type: object
+                maxItems: 5
+                type: array
+                x-kubernetes-list-type: atomic
+              body:
+                maxLength: 20000
+                minLength: 1
+                type: string
+              context:
+                description: Context is filled by the client and never sent to GitHub.
+                properties:
+                  client:
+                    description: Client is the surface a request came from.
+                    enum:
+                    - website
+                    - portal
+                    - datumctl
+                    - patch
+                    - email
+                    - github
+                    type: string
+                  clientVersion:
+                    description: ClientVersion is e.g. cloud-portal@2026.10.1.
+                    maxLength: 128
+                    type: string
+                  organization:
+                    maxLength: 253
+                    type: string
+                  pageURL:
+                    maxLength: 2048
+                    type: string
+                  project:
+                    maxLength: 253
+                    type: string
+                  requestIDs:
+                    description: RequestIDs are recent API request IDs, for debugging.
+                    items:
+                      maxLength: 128
+                      type: string
+                    maxItems: 20
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+              kind:
+                description: SubmissionKind is what the submitter says the feedback
+                  is.
+                enum:
+                - idea
+                - bug
+                - other
+                type: string
+              title:
+                maxLength: 200
+                minLength: 1
+                type: string
+              userRef:
+                description: UserRef is the submitter, set by the admission webhook.
+                properties:
+                  name:
+                    maxLength: 63
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - body
+            - kind
+            - title
+            - userRef
+            type: object
+            x-kubernetes-validations:
+            - message: submissions can't be changed after they are sent
+              rule: self == oldSelf
+          status:
+            description: |-
+              SubmissionStatus is written by the operator from the SubmissionReview, and
+              is all the submitter learns about the review.
+            properties:
+              phase:
+                description: SubmissionPhase is where a submission is in review.
+                enum:
+                - PendingReview
+                - Approved
+                - Merged
+                - Rejected
+                type: string
+              postRef:
+                description: PostRef is the post the submission became or was merged
+                  into.
+                properties:
+                  name:
+                    description: Name of the Post, e.g. datum-cloud.enhancements.912.
+                    maxLength: 200
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              reason:
+                description: Reason is shown to the submitter when the submission
+                  is Rejected.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    selectableFields:
+    - jsonPath: .spec.userRef.name
+    - jsonPath: .spec.kind
+    - jsonPath: .status.phase
+    served: true
+    storage: true
+    subresources:
+      status: {}

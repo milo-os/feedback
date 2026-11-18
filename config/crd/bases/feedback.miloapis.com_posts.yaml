@@ -1,0 +1,364 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+    discovery.miloapis.com/parent-contexts: Platform;User
+    iam.miloapis.com/hidden-field: spec.hidden
+  name: posts.feedback.miloapis.com
+spec:
+  group: feedback.miloapis.com
+  names:
+    kind: Post
+    listKind: PostList
+    plural: posts
+    singular: post
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.title
+      name: Title
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.votes.total
+      name: Votes
+      type: integer
+    - jsonPath: .status.delivery.stage
+      name: Stage
+      type: string
+    - jsonPath: .spec.hidden
+      name: Hidden
+      priority: 1
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Post is a public roadmap item synced from a GitHub issue. Every Post is
+          backed by a GitHub issue; unreviewed feedback is a Submission, never a Post.
+
+          The name is "<org>.<repository>.<number>", e.g. datum-cloud.enhancements.912.
+
+          Only the feedback-sync service account creates, updates and deletes posts.
+          feedback-sync and feedback-operator write status with server-side apply:
+          sync owns the GitHub fields, the operator owns votes and delivery. Staff
+          can only patch spec.hidden, and Milo hides hidden posts from everyone
+          without get on posts/hidden.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PostSpec holds the fields staff control.
+            properties:
+              hidden:
+                description: Hidden removes the post from every client and from search.
+                type: boolean
+            type: object
+          status:
+            description: PostStatus holds the fields synced from GitHub and derived
+              by the service.
+            properties:
+              bodyHTML:
+                description: BodyHTML is the issue body, sanitised against an allow-list.
+                type: string
+              categories:
+                description: Categories are mapped from labels by the FeedbackSource.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+              delivery:
+                description: Delivery tracks the post from request to release.
+                properties:
+                  highestNotified:
+                    description: |-
+                      HighestNotified is the highest stage announced to followers. A stage is
+                      only announced when it passes this one.
+                    enum:
+                    - requested
+                    - planned
+                    - picked-up
+                    - released
+                    - closed
+                    type: string
+                  history:
+                    description: History records each stage change.
+                    items:
+                      description: DeliveryEvent is one stage change.
+                      properties:
+                        at:
+                          format: date-time
+                          type: string
+                        cause:
+                          description: Cause describes what moved the stage, e.g.
+                            a pull request opening.
+                          type: string
+                        stage:
+                          description: |-
+                            DeliveryStage is where a post is in delivery. Stages are ordered
+                            requested < planned < picked-up < released; closed is terminal.
+                          enum:
+                          - requested
+                          - planned
+                          - picked-up
+                          - released
+                          - closed
+                          type: string
+                      required:
+                      - at
+                      - stage
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  stage:
+                    description: Stage is the highest stage whose condition currently
+                      holds.
+                    enum:
+                    - requested
+                    - planned
+                    - picked-up
+                    - released
+                    - closed
+                    type: string
+                  work:
+                    description: Work is the related work behind the post.
+                    properties:
+                      done:
+                        format: int32
+                        type: integer
+                      items:
+                        items:
+                          description: WorkItem is a sub-issue or linked pull request.
+                          properties:
+                            kind:
+                              description: Kind is "issue" or "pullRequest".
+                              type: string
+                            pullRequests:
+                              description: PullRequests are the pull requests that
+                                close this issue.
+                              items:
+                                description: PullRequestRef is a pull request linked
+                                  to a work item.
+                                properties:
+                                  ref:
+                                    type: string
+                                  state:
+                                    type: string
+                                required:
+                                - ref
+                                - state
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            ref:
+                              description: Ref is "<org>/<repo>#<number>".
+                              type: string
+                            state:
+                              description: State is "open", "closed" or "merged".
+                              type: string
+                            title:
+                              type: string
+                            url:
+                              type: string
+                          required:
+                          - kind
+                          - ref
+                          - state
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      partShipped:
+                        description: PartShipped records changelog entries that shipped
+                          part of the work.
+                        items:
+                          description: |-
+                            PartShipped records a changelog entry that linked a work item before the
+                            post itself was released.
+                          properties:
+                            at:
+                              format: date-time
+                              type: string
+                            changelog:
+                              description: Changelog is the ChangelogEntry name.
+                              type: string
+                          required:
+                          - at
+                          - changelog
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      total:
+                        description: |-
+                          Total and Done count sub-issues when there are any, otherwise linked
+                          pull requests.
+                        format: int32
+                        type: integer
+                    type: object
+                type: object
+              github:
+                description: GitHub identifies the backing issue.
+                properties:
+                  createdAt:
+                    format: date-time
+                    type: string
+                  number:
+                    format: int32
+                    type: integer
+                  org:
+                    type: string
+                  repository:
+                    type: string
+                  state:
+                    description: State is "open" or "closed".
+                    type: string
+                  stateReason:
+                    description: 'StateReason is GitHub''s close reason: "completed"
+                      or "not_planned".'
+                    type: string
+                  updatedAt:
+                    format: date-time
+                    type: string
+                  url:
+                    type: string
+                required:
+                - number
+                - org
+                - repository
+                - state
+                - url
+                type: object
+              issueType:
+                description: IssueType is the GitHub issue type, e.g. Enhancement.
+                type: string
+              labels:
+                description: Labels are the issue's GitHub labels.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+              lastSyncedAt:
+                description: LastSyncedAt is when feedback-sync last wrote this post.
+                format: date-time
+                type: string
+              mergedInto:
+                description: |-
+                  MergedInto is the post this one was closed as a duplicate of. When
+                  feedback-sync sets it, the operator moves votes and subscriptions to
+                  that post.
+                type: string
+              publicVoters:
+                description: PublicVoters are up to 10 voters who opted in to showing
+                  their votes.
+                items:
+                  description: PublicVoter is a voter who opted in to being shown.
+                  properties:
+                    avatarURL:
+                      type: string
+                    displayName:
+                      type: string
+                  required:
+                  - displayName
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              release:
+                description: Release is the name of the Release whose milestone the
+                  issue is on.
+                type: string
+              state:
+                description: State is the public status, mapped from the Enhancements
+                  project.
+                enum:
+                - none
+                - backlog
+                - planning
+                - on-deck
+                - in-progress
+                - shipped
+                - closed
+                type: string
+              summary:
+                description: Summary is a plain-text excerpt of the body.
+                type: string
+              title:
+                description: Title is the issue title.
+                type: string
+              votes:
+                description: Votes are the vote totals.
+                properties:
+                  datum:
+                    description: Datum is the number of Vote resources.
+                    format: int32
+                    type: integer
+                  github:
+                    description: "GitHub is the \U0001F44D reaction count on the issue."
+                    format: int32
+                    type: integer
+                  githubReactions:
+                    description: "GitHubReactions are the issue's \U0001F44D reactions,
+                      written by feedback-sync\nwhen the count changes. Used to match
+                      linked voters and for the\ntrending score. GitHub reactions
+                      are public."
+                    items:
+                      description: "GitHubReaction is one \U0001F44D on a GitHub issue."
+                      properties:
+                        at:
+                          description: At is when they reacted.
+                          format: date-time
+                          type: string
+                        login:
+                          description: Login is the reactor's GitHub username.
+                          type: string
+                      required:
+                      - login
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  linked:
+                    description: "Linked is how many people both voted and reacted
+                      \U0001F44D, matched by the\nGitHub username linked to their
+                      Datum account. They count once in\nTotal."
+                    format: int32
+                    type: integer
+                  total:
+                    description: "Total is Datum votes plus GitHub \U0001F44D, minus
+                      people matched as doing both."
+                    format: int32
+                    type: integer
+                  trendingScore:
+                    description: "TrendingScore weights votes with a 7-day half-life:\nΣ
+                      0.5^(age_days / 7) over Datum votes and GitHub \U0001F44D reactions
+                      whose\ntime is known, counting linked people once. Stored multiplied
+                      by 1000\nand rounded, so it sorts as an integer."
+                    format: int64
+                    type: integer
+                type: object
+            type: object
+        type: object
+    selectableFields:
+    - jsonPath: .spec.hidden
+    served: true
+    storage: true
+    subresources:
+      status: {}

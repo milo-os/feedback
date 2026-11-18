@@ -1,0 +1,125 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+    discovery.miloapis.com/parent-contexts: Platform
+  name: feedbackdigests.feedback.miloapis.com
+spec:
+  group: feedback.miloapis.com
+  names:
+    kind: FeedbackDigest
+    listKind: FeedbackDigestList
+    plural: feedbackdigests
+    singular: feedbackdigest
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.itemCount
+      name: Items
+      type: integer
+    - jsonPath: .status.lastSentAt
+      name: Last sent
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          FeedbackDigest is one user's queue of events for their next daily digest,
+          named after the user. Only the operator writes it; staff can read it. The
+          operator clears it once the digest Email is created.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: FeedbackDigestSpec is the pending queue.
+            properties:
+              itemCount:
+                description: ItemCount is len(items), for the printer column.
+                format: int32
+                type: integer
+              items:
+                description: |-
+                  Items holds at most one line per post or submission; a later event
+                  replaces an earlier one.
+                items:
+                  description: DigestItem is one line of a digest.
+                  properties:
+                    at:
+                      format: date-time
+                      type: string
+                    changelog:
+                      description: Changelog is the ChangelogEntry for part-shipped
+                        and released.
+                      type: string
+                    event:
+                      description: DigestEvent is something a follower or submitter
+                        is told about.
+                      enum:
+                      - picked-up
+                      - part-shipped
+                      - released
+                      - closed
+                      - approved
+                      - merged
+                      - rejected
+                      type: string
+                    post:
+                      description: Post is the post the event is about.
+                      type: string
+                    submission:
+                      description: Submission is the submission the event is about,
+                        for review outcomes.
+                      type: string
+                  required:
+                  - at
+                  - event
+                  type: object
+                maxItems: 500
+                type: array
+                x-kubernetes-list-type: atomic
+              userRef:
+                description: UserReference names a Milo User by its metadata.name.
+                properties:
+                  name:
+                    maxLength: 63
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - userRef
+            type: object
+          status:
+            description: FeedbackDigestStatus records sends.
+            properties:
+              lastEmail:
+                description: LastEmail is the name of the last Email created.
+                type: string
+              lastSentAt:
+                format: date-time
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources: {}

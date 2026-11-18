@@ -1,0 +1,12 @@
+# Created by the operator with the same name as the submission. Staff set the
+# decision; the webhook records the reviewer.
+apiVersion: feedback.miloapis.com/v1alpha1
+kind: SubmissionReview
+metadata:
+  name: sub-7f3k2
+spec:
+  decision: Approved
+  publicTitle: Region selection for Galactic VPC attachments
+  publicBody: |
+    ### Summary
+    Choose the region a VPC attachment lands in.
