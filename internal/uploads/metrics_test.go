@@ -3,12 +3,57 @@ package uploads
 import (
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"go.miloapis.com/feedback/internal/ratelimit"
 )
+
+// Rates and alerts only see an event if its series existed before it, so
+// every series must be there, at zero, before the first request.
+func TestMetricsStartAtZero(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	NewMetrics(reg)
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests := map[string]float64{}
+	durations := map[string]uint64{}
+	for _, f := range families {
+		for _, m := range f.GetMetric() {
+			labels := map[string]string{}
+			for _, l := range m.GetLabel() {
+				labels[l.GetName()] = l.GetValue()
+			}
+			switch f.GetName() {
+			case "feedback_uploads_requests_total":
+				requests[labels["route"]+" "+labels["code"]] = m.GetCounter().GetValue()
+			case "feedback_uploads_request_duration_seconds":
+				durations[labels["route"]] = m.GetHistogram().GetSampleCount()
+			}
+		}
+	}
+	for _, route := range []string{routeUpload, routeDownload} {
+		if n, ok := durations[route]; !ok || n != 0 {
+			t.Errorf("%s duration: present %v, count %d, want present at 0", route, ok, n)
+		}
+		for _, code := range codes[route] {
+			key := route + " " + strconv.Itoa(code)
+			if v, ok := requests[key]; !ok || v != 0 {
+				t.Errorf("%s requests: present %v, value %v, want present at 0", key, ok, v)
+			}
+		}
+	}
+	for _, key := range []string{"upload 201", "upload 429", "upload 503", "download 200", "download 404", "download 503"} {
+		if _, ok := requests[key]; !ok {
+			t.Errorf("%s requests: missing", key)
+		}
+	}
+}
 
 func TestMetricsCountRequestsAndRefusals(t *testing.T) {
 	s, h := newServer(t)

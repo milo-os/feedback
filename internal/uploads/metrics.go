@@ -21,6 +21,17 @@ const (
 	reasonRateLimited = "rate_limited"
 )
 
+// codes are the status codes each route answers with.
+var codes = map[string][]int{
+	routeUpload: {
+		http.StatusCreated, http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound,
+		http.StatusRequestEntityTooLarge, http.StatusTooManyRequests, http.StatusServiceUnavailable,
+	},
+	routeDownload: {
+		http.StatusOK, http.StatusUnauthorized, http.StatusNotFound, http.StatusTooManyRequests, http.StatusServiceUnavailable,
+	},
+}
+
 // Bucket operations that can fail.
 const (
 	opUpload = "upload"
@@ -68,6 +79,10 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	reg.MustRegister(m.requests, m.duration, m.refused, m.bucketErrors, m.inFlight)
 	// Start every series at zero, so rates and alerts see the first event.
 	for _, route := range []string{routeUpload, routeDownload} {
+		for _, code := range codes[route] {
+			m.requests.WithLabelValues(route, strconv.Itoa(code))
+		}
+		m.duration.WithLabelValues(route)
 		m.inFlight.WithLabelValues(route)
 		m.refused.WithLabelValues(route, reasonReplicaBusy)
 		m.refused.WithLabelValues(route, reasonUserBusy)
