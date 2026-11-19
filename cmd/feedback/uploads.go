@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -22,6 +25,7 @@ import (
 type uploadsOptions struct {
 	miloKubeconfig   string
 	addr             string
+	metricsAddr      string
 	bucket           string
 	maxSize          int
 	perMinute        float64
@@ -46,6 +50,7 @@ func newUploadsCommand() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&o.miloKubeconfig, "milo-kubeconfig", "", "Kubeconfig for Milo. Empty uses the in-cluster config.")
 	f.StringVar(&o.addr, "listen-address", ":8080", "Address to serve HTTP on. TLS is terminated in front of the service.")
+	f.StringVar(&o.metricsAddr, "metrics-bind-address", ":9090", "Address to serve Prometheus metrics on, apart from --listen-address so they aren't public; 0 disables it.")
 	f.StringVar(&o.bucket, "attachments-bucket", "", "Bucket URL for attachments: gs://BUCKET, s3://BUCKET?region=REGION, or s3://BUCKET?endpoint=URL&region=REGION&use_path_style=true for an S3-compatible store. file:///PATH for local development.")
 	f.IntVar(&o.maxSize, "attachment-max-size", attachments.DefaultMaxSize, "Largest file accepted, in bytes.")
 	f.Float64Var(&o.perMinute, "uploads-per-minute", 2, "Uploads a user may make per minute, on average; 0 disables the limit.")
@@ -98,15 +103,38 @@ func runUploads(ctx context.Context, o uploadsOptions) error {
 		UploadsPerUser:   uploads.NewUserSlots(o.maxUserUploads),
 		DownloadsPerUser: uploads.NewUserSlots(o.maxUserDownloads),
 	}
-	srv := uploads.NewHTTPServer(o.addr, s.Handler())
+	servers := []*http.Server{}
+	if o.metricsAddr != "0" {
+		reg := prometheus.NewRegistry()
+		reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+		s.Metrics = uploads.NewMetrics(reg)
+		mux := http.NewServeMux()
+		mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+		servers = append(servers, &http.Server{Addr: o.metricsAddr, Handler: mux, ReadHeaderTimeout: 10 * time.Second})
+		log.Info("Serving metrics", "address", o.metricsAddr)
+	}
+	servers = append(servers, uploads.NewHTTPServer(o.addr, s.Handler()))
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(shutdown)
+		for _, srv := range servers {
+			_ = srv.Shutdown(shutdown)
+		}
 	}()
 	log.Info("Serving uploads", "address", o.addr)
-	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+	errs := make(chan error, len(servers))
+	for _, srv := range servers {
+		go func() { errs <- srv.ListenAndServe() }()
+	}
+	// The first server to stop, for a signal or an error, stops the rest.
+	err = <-errs
+	if !errors.Is(err, http.ErrServerClosed) {
+		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		for _, srv := range servers {
+			_ = srv.Shutdown(shutdown)
+		}
 		return err
 	}
 	return nil

@@ -83,6 +83,9 @@ type Server struct {
 	// transfers on this replica, below Uploads and Downloads, so slow
 	// requests from one user can't keep everyone else busy. Nil doesn't cap.
 	UploadsPerUser, DownloadsPerUser *UserSlots
+	// Metrics records requests, refusals and bucket errors. Nil doesn't
+	// record.
+	Metrics *Metrics
 }
 
 // Default transfer caps, for the 256Mi container limit in
@@ -201,22 +204,26 @@ func (u *UserSlots) inUse(user string) int {
 	return u.held[user]
 }
 
-// claim takes a transfer slot for user: one of theirs, then one of the
-// replica's. If either is full it answers the request, 429 for the user's
-// cap and 503 for the replica's, and returns ok false. Otherwise the caller
-// must call release when the transfer ends.
-func claim(w http.ResponseWriter, perUser *UserSlots, replica Slots, user string) (release func(), ok bool) {
+// claim takes a transfer slot on route for user: one of theirs, then one of
+// the replica's. If either is full it answers the request, 429 for the
+// user's cap and 503 for the replica's, and returns ok false. Otherwise the
+// caller must call release when the transfer ends.
+func (s *Server) claim(w http.ResponseWriter, route string, perUser *UserSlots, replica Slots, user string) (release func(), ok bool) {
 	if !perUser.take(user) {
+		s.Metrics.refuse(route, reasonUserBusy)
 		w.Header().Set("Retry-After", strconv.Itoa(int(RetryAfter.Seconds())))
 		fail(w, http.StatusTooManyRequests, "you have too many transfers in progress; try again when one finishes")
 		return nil, false
 	}
 	if !replica.take() {
 		perUser.give(user)
+		s.Metrics.refuse(route, reasonReplicaBusy)
 		busy(w)
 		return nil, false
 	}
+	done := s.Metrics.transferring(route)
 	return func() {
+		done()
 		replica.give()
 		perUser.give(user)
 	}, true
@@ -284,9 +291,11 @@ func busy(w http.ResponseWriter) {
 // Handler returns the service's HTTP handler.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /users/{user}/uploads/{resource}", s.upload)
-	mux.HandleFunc("GET /users/{user}/{resource}/{name}/attachments/{ref}", s.download)
-	mux.HandleFunc("GET /{resource}/{name}/attachments/{ref}", s.download)
+	upload := s.Metrics.instrument(routeUpload, s.upload)
+	download := s.Metrics.instrument(routeDownload, s.download)
+	mux.HandleFunc("POST /users/{user}/uploads/{resource}", upload)
+	mux.HandleFunc("GET /users/{user}/{resource}/{name}/attachments/{ref}", download)
+	mux.HandleFunc("GET /{resource}/{name}/attachments/{ref}", download)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "ok") })
 	return mux
 }
@@ -328,13 +337,14 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusRequestEntityTooLarge, tooBig)
 		return
 	}
-	release, ok := claim(w, s.UploadsPerUser, s.Uploads, caller.Username)
+	release, ok := s.claim(w, routeUpload, s.UploadsPerUser, s.Uploads, caller.Username)
 	if !ok {
 		return
 	}
 	defer release()
 	// After taking a slot, so a busy replica doesn't spend the user's quota.
 	if ok, wait := s.Limiter.Allow(user); !ok {
+		s.Metrics.refuse(routeUpload, reasonRateLimited)
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 		fail(w, http.StatusTooManyRequests, "too many uploads; try again shortly")
 		return
@@ -370,6 +380,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	ref, sum, err := s.Files.Upload(ctx, purpose, user, name, contentType, data)
 	if err != nil {
+		s.Metrics.bucketError(opUpload)
 		log.FromContext(ctx).Error(err, "Storing an upload failed")
 		fail(w, http.StatusServiceUnavailable, "storing the file failed; try again")
 		return
@@ -410,21 +421,21 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, "not found")
 		return
 	}
-	release, ok := claim(w, s.DownloadsPerUser, s.Downloads, caller.Username)
+	release, ok := s.claim(w, routeDownload, s.DownloadsPerUser, s.Downloads, caller.Username)
 	if !ok {
 		return
 	}
 	defer release()
 	f, err := s.Files.Get(ctx, purpose, name, owner, ref)
 	if err != nil {
-		unreadable(ctx, w, err)
+		s.unreadable(ctx, w, opGet, err)
 		return
 	}
 	ctx, cancel := transfer(w, r, f.Size)
 	defer cancel()
 	body, err := f.Open(ctx)
 	if err != nil {
-		unreadable(ctx, w, err)
+		s.unreadable(ctx, w, opOpen, err)
 		return
 	}
 	defer func() { _ = body.Close() }()
@@ -442,12 +453,13 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// unreadable answers a download whose file couldn't be read.
-func unreadable(ctx context.Context, w http.ResponseWriter, err error) {
+// unreadable answers a download whose file couldn't be read by op.
+func (s *Server) unreadable(ctx context.Context, w http.ResponseWriter, op string, err error) {
 	if errors.Is(err, attachments.ErrNotFound) {
 		fail(w, http.StatusNotFound, "not found")
 		return
 	}
+	s.Metrics.bucketError(op)
 	log.FromContext(ctx).Error(err, "Reading an attachment failed")
 	fail(w, http.StatusServiceUnavailable, "try again")
 }

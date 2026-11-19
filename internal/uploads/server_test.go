@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -71,7 +72,8 @@ func newServerAt(t *testing.T, bucketURL string, maxSize int) (*Server, http.Han
 	files.MaxSize = maxSize
 	scheme := runtime.NewScheme()
 	_ = v1.AddToScheme(scheme)
-	s := &Server{Files: files, Authn: fakeMilo{}, Authz: fakeMilo{}, Objects: fake.NewClientBuilder().WithScheme(scheme).Build()}
+	s := &Server{Files: files, Authn: fakeMilo{}, Authz: fakeMilo{}, Objects: fake.NewClientBuilder().WithScheme(scheme).Build(),
+		Metrics: NewMetrics(prometheus.NewRegistry())}
 	return s, s.Handler()
 }
 
