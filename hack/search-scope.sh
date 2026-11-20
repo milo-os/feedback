@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Checks which Milo contexts can find a post in search, as README.md's "Who
 # can search posts" describes: a query at the platform root finds a visible,
-# indexed post, and a query in a user's own context finds no posts at all.
+# indexed post, and a user's own context has no search API yet. Once search
+# serves ResourceSearchQuery there, the user context finds the post too
+# (visibility: AllContexts), and this reports README.md as out of date.
 #
 #   PLATFORM_KUBECONFIG=<milo platform-root kubeconfig> \
 #   USER_KUBECONFIG=<kubeconfig for a user's control plane> \
@@ -33,6 +35,11 @@ title=$(jq -r '.status.title // ""' <<<"$obj")
 [[ -n $title ]] || { echo "post $post has no title" >&2; exit 2; }
 [[ $(jq '.spec.hidden == true' <<<"$obj") == false ]] || { echo "post $post is hidden; pick a visible post" >&2; exit 2; }
 
+# served <kubeconfig> reports whether that context serves ResourceSearchQuery.
+served() {
+	KUBECONFIG=$1 kubectl api-resources --api-group=search.miloapis.com -o name 2>/dev/null | grep -qx 'resourcesearchqueries.search.miloapis.com'
+}
+
 # search <kubeconfig> prints the names of the posts the query returns.
 search() {
 	local query out
@@ -50,7 +57,6 @@ search() {
 }
 
 platform=$(search "$PLATFORM_KUBECONFIG") || exit 2
-user=$(search "$USER_KUBECONFIG") || exit 2
 
 ok=1
 if grep -qxF "$post" <<<"$platform"; then
@@ -59,10 +65,15 @@ else
 	echo "platform root: doesn't find $post; is it indexed?"
 	ok=0
 fi
-if [[ -z $user ]]; then
-	echo "user context: finds no posts"
+if ! served "$USER_KUBECONFIG"; then
+	echo "user context: no search API"
 else
-	echo "user context: finds posts ($(paste -sd, - <<<"$user")); README.md's \"Who can search posts\" is out of date"
+	user=$(search "$USER_KUBECONFIG") || exit 2
+	if grep -qxF "$post" <<<"$user"; then
+		echo "user context: search is served and finds $post; README.md's \"Who can search posts\" is out of date"
+	else
+		echo "user context: search is served but doesn't find $post; check the policies' visibility"
+	fi
 	ok=0
 fi
 ((ok)) || exit 1

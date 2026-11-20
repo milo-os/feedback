@@ -26,6 +26,7 @@ type indexPolicy struct {
 		TargetResource struct {
 			Group, Version, Kind string
 		} `json:"targetResource"`
+		Visibility string `json:"visibility"`
 		Conditions []struct {
 			Name, Expression string
 		} `json:"conditions"`
@@ -115,6 +116,10 @@ func TestSearchPolicies(t *testing.T) {
 		if tr.Group != group || tr.Version != "v1alpha1" || !ok {
 			t.Errorf("%s targets %+v; only posts, releases and changelog entries are indexed", p.Metadata.Name, tr)
 			continue
+		}
+		// Everything indexed here is public, so every context may find it.
+		if p.Spec.Visibility != "AllContexts" {
+			t.Errorf("%s has visibility %q; want AllContexts", p.Metadata.Name, p.Spec.Visibility)
 		}
 		for _, f := range p.Spec.Fields {
 			if _, ok := resolve(typ, f.Path); !ok {

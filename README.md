@@ -123,11 +123,11 @@ Milo audits feedback writes like any other CRD. Its audit policy (in `datum-clou
 The search service filters every `ResourceSearchQuery` by the caller's Milo context, taken from the `iam.miloapis.com/parent-type` and `parent-name` user extras (`internal/registry/resourcesearchquery` in `milo-os/search`):
 
 - **Platform root** (no parent context): no filter. The query sees every indexed document from every tenant.
-- **User, organization or project control plane**: only documents indexed from that same user, organization or project.
+- **User, organization or project control plane**: documents stored under that same user, organization or project, plus, for indexes whose policy sets `visibility: AllContexts` (milo-os/search#172), documents stored under the platform root.
 
-feedback-sync and the operator write posts, releases and changelog entries at the platform root, so they're indexed as platform documents. **Only platform-root queries find them.** A query in a user, organization or project context returns no posts and no error. That rules out the cloud portal's user-context calls and `datumctl` in an org or project context.
+feedback-sync and the operator write posts, releases and changelog entries at the platform root, and every policy in `config/milo/search` sets `visibility: AllContexts`, so a query in any context can find them. That's safe because everything in these indexes may be read by any signed-in user: hidden posts are left out by the posts policy's condition, and nothing private is indexed. `test/config` checks every policy sets it.
 
-Similar posts and keyword search therefore run on a server, at the platform root:
+**Today search only serves `ResourceSearchQuery` at the platform root.** Its `DiscoveryContextPolicy` lists only the `Platform` context, so a user, organization or project control plane has no search API, whatever the visibility. Until search is served in those contexts, similar posts and keyword search run on a server, at the platform root:
 
 | Caller | How it searches posts |
 | --- | --- |

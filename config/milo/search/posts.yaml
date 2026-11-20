@@ -8,10 +8,10 @@
 # them, and a condition that can't be evaluated counts as no match. has()
 # can't test for a missing spec, so the Post CRD defaults spec to {}.
 #
-# Posts are written at Milo's platform root, so they're indexed as platform
-# documents and only platform-root ResourceSearchQueries find them; user,
-# organization and project contexts get nothing. See "Who can search posts"
-# in README.md.
+# Posts are written at Milo's platform root. visibility: AllContexts lets a
+# query in any context find them as well as the caller's own documents; it's
+# safe because every visible post is public, and hidden ones aren't indexed.
+# See "Who can search posts" in README.md.
 apiVersion: search.miloapis.com/v1alpha1
 kind: ResourceIndexPolicy
 metadata:
@@ -21,6 +21,7 @@ spec:
     group: feedback.miloapis.com
     version: v1alpha1
     kind: Post
+  visibility: AllContexts
   conditions:
     - name: visible
       expression: "!has(spec.hidden) || !spec.hidden"
