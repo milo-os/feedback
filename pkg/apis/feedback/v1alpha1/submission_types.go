@@ -211,7 +211,10 @@ type SubmissionReviewStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// SubmissionTriage is the operator's advisory triage.
+// SubmissionTriage is the operator's advisory triage. A check inside the
+// operator sets LikelySecurityIssue first, before anything about the
+// submission leaves it; only a submission it doesn't flag may be sent to the
+// AI gateway.
 type SubmissionTriage struct {
 	// +optional
 	// +listType=set
@@ -222,14 +225,17 @@ type SubmissionTriage struct {
 	// +optional
 	// +listType=atomic
 	SimilarPosts []SimilarPost `json:"similarPosts,omitempty"`
-	// DraftIssue is a public title and body with private details stripped.
+	// DraftIssue is a public title and body with private details stripped,
+	// drafted by the AI gateway. Never drafted while LikelySecurityIssue is
+	// set.
 	// +optional
 	DraftIssue *DraftIssue `json:"draftIssue,omitempty"`
 	// FraudScore is from the fraud service, 0 to 1, as a decimal string.
 	// +optional
 	FraudScore string `json:"fraudScore,omitempty"`
 	// LikelySecurityIssue flags submissions that should be moved to the
-	// security track.
+	// security track. While it is set, the submission's text and attachments
+	// are never sent to the AI gateway or any other outside service.
 	// +optional
 	LikelySecurityIssue bool `json:"likelySecurityIssue,omitempty"`
 }
