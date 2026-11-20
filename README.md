@@ -115,6 +115,7 @@ Milo audits feedback writes like any other CRD. Its audit policy (in `datum-clou
 - **Hidden posts:** the policy's condition leaves them out, and hiding a post removes it from the index. The condition reads `spec.hidden`, and the indexer can't evaluate it on an object with no `spec` (it logs an error and treats the post as not matching, which also deletes it from the index), so the `Post` CRD defaults `spec` to `{}`.
 - **Never indexed:** submissions, reviews, security reports, votes and follows.
 - **What it relies on:** the indexer reads objects from Milo's audit log, so it needs Milo to log feedback writes at `RequestResponse` (see Audit and activity).
+- **Draft text in queries:** similar-posts search sends a draft's title and body as the query, and someone may type a vulnerability into the general form before staff move it to the security track. Milo audits `ResourceSearchQuery` at `Metadata` only (its own rule, datum-cloud/infra#9711), so query text never reaches the audit log, and the search service only logs it at debug verbosity, which isn't enabled.
 - **Measuring lag:** `hack/search-lag.sh <post>` measures how long a post change takes to reach the index. Run it against staging with a platform-root kubeconfig; it hides a visible post briefly and always puts back its original `spec.hidden`.
 
 ### Who can search posts
