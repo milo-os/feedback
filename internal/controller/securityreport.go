@@ -3,12 +3,14 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,7 +31,8 @@ import (
 //     sees.
 //   - It gets its SecurityReportTriage, owned by the report, for the
 //     Security Team's private notes.
-//   - Its attachments are copied under it and deleted with it.
+//   - Its attachments are copied under it and deleted with it. A report a
+//     move is still copying files to is deleted only once the move lets go.
 //   - Once it is Fixed or Disclosed and the reporter chose public credit, it
 //     has a SecurityAcknowledgement with the credited name, link, month and
 //     severity; otherwise it has none.
@@ -43,6 +46,9 @@ func (r *SecurityReportReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	var rep v1.SecurityReport
 	if err := r.Get(ctx, req.NamespacedName, &rep); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	if held, err := r.moveHolds(ctx, &rep); err != nil || (held && rep.DeletionTimestamp != nil) {
+		return ctrl.Result{}, err
 	}
 	owner := ""
 	if rep.Spec.UserRef != nil {
@@ -70,6 +76,28 @@ func (r *SecurityReportReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 	return ctrl.Result{}, r.acknowledge(ctx, &rep)
+}
+
+// moveHolds reports whether a move still holds rep with MoveFinalizer. The
+// move lets go once it has copied its files; if the submission it was moving
+// is gone first, nothing else will, so this lets go instead.
+func (r *SecurityReportReconciler) moveHolds(ctx context.Context, rep *v1.SecurityReport) (bool, error) {
+	if !controllerutil.ContainsFinalizer(rep, MoveFinalizer) {
+		return false, nil
+	}
+	if name := rep.Annotations[v1.MovedFromSubmissionAnnotation]; name != "" {
+		var sub v1.Submission
+		err := r.Get(ctx, types.NamespacedName{Name: name}, &sub)
+		if err == nil && string(sub.UID) == rep.Annotations[v1.MovedFromSubmissionUIDAnnotation] {
+			return true, nil
+		}
+		if client.IgnoreNotFound(err) != nil {
+			return false, err
+		}
+	}
+	patch := client.MergeFrom(rep.DeepCopy())
+	controllerutil.RemoveFinalizer(rep, MoveFinalizer)
+	return false, r.Patch(ctx, rep, patch)
 }
 
 // acknowledge creates, updates or deletes the report's acknowledgement.
@@ -125,6 +153,16 @@ func (r *SecurityReportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Named("security-report").
 		For(&v1.SecurityReport{}).
 		Owns(&v1.SecurityAcknowledgement{}).
+		// A deleted submission can't finish its move, so the report it was
+		// moving to is let go.
+		Watches(&v1.Submission{}, handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+			return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: v1.MovedReportName(obj.GetName(), obj.GetUID())}}}
+		}), builder.WithPredicates(predicate.Funcs{
+			CreateFunc:  func(event.CreateEvent) bool { return false },
+			UpdateFunc:  func(event.UpdateEvent) bool { return false },
+			DeleteFunc:  func(event.DeleteEvent) bool { return true },
+			GenericFunc: func(event.GenericEvent) bool { return false },
+		})).
 		Complete(r)
 }
 
@@ -132,6 +170,14 @@ func (r *SecurityReportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // review when a report the move didn't create already has the moved report's
 // name. The submission is kept.
 const ReasonReportNameTaken = "ReportNameTaken"
+
+// MoveFinalizer is on a report while a move copies files under it, so
+// deleting the report can't clean up its files before the last copy lands.
+const MoveFinalizer = "feedback.miloapis.com/move"
+
+// beforeMoveCopy, if set, runs just before a move copies files to report.
+// Tests use it to act during the copy.
+var beforeMoveCopy atomic.Pointer[func(report string)]
 
 // MoveReconciler carries out MoveToSecurity decisions. It creates a
 // SecurityReport owned by the submitter from the submission, named by
@@ -142,6 +188,10 @@ const ReasonReportNameTaken = "ReportNameTaken"
 // files). A report with that name that wasn't made from this submission is
 // left alone, and so is the submission: the review gets Applied=False,
 // ReportNameTaken, and the move is tried again when a report is deleted.
+//
+// While it copies, the move holds the report with MoveFinalizer. If the
+// report is deleted before the move lets go, the submission is kept and,
+// once the report has gone with its files, moved again.
 type MoveReconciler struct {
 	client.Client
 	Options
@@ -194,17 +244,60 @@ func (r *MoveReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				"The move is tried again once that report is deleted.", rep.Name))
 	}
 	if rep.DeletionTimestamp != nil {
-		// The moved report is being deleted before the submission was. Wait
-		// for it to go (its deletion requeues this) and create it again.
-		return ctrl.Result{}, nil
+		// The moved report is being deleted before the submission was. Let
+		// go of it, wait for it to go (its deletion requeues this) and create
+		// it again.
+		_, err := r.letGo(ctx, &rep)
+		return ctrl.Result{}, err
 	}
 
 	if len(sub.Spec.Attachments) > 0 {
+		if !controllerutil.ContainsFinalizer(&rep, MoveFinalizer) {
+			// A retry after letting go. Update, not patch: it fails if the
+			// report has started being deleted since it was read.
+			controllerutil.AddFinalizer(&rep, MoveFinalizer)
+			if err := r.Update(ctx, &rep); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		if hook := beforeMoveCopy.Load(); hook != nil {
+			(*hook)(rep.Name)
+		}
 		if err := r.Files.CopyParent(ctx, attachments.Submission, attachments.SecurityReport, sub.Name, rep.Name); err != nil {
 			return ctrl.Result{}, fmt.Errorf("copying attachments: %w", err)
 		}
+		deleting, err := r.letGo(ctx, &rep)
+		if err != nil || deleting {
+			// Deleted during the copy: its cleanup takes the copies, and the
+			// submission is kept to move again.
+			return ctrl.Result{}, err
+		}
 	}
 	return ctrl.Result{}, client.IgnoreNotFound(r.Delete(ctx, &sub, client.Preconditions{UID: &sub.UID}))
+}
+
+// letGo removes MoveFinalizer from rep, and reports whether rep is being
+// deleted. Each update carries the resourceVersion it read, so a report
+// whose deletion started since is read again and reported.
+func (r *MoveReconciler) letGo(ctx context.Context, rep *v1.SecurityReport) (deleting bool, err error) {
+	first := true
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if !first {
+			if err := r.Get(ctx, client.ObjectKeyFromObject(rep), rep); err != nil {
+				return err
+			}
+		}
+		first = false
+		deleting = rep.DeletionTimestamp != nil
+		if !controllerutil.RemoveFinalizer(rep, MoveFinalizer) {
+			return nil
+		}
+		return r.Update(ctx, rep)
+	})
+	if apierrors.IsNotFound(err) {
+		return true, nil
+	}
+	return deleting, err
 }
 
 // movedReport is the report sub moves to.
@@ -231,8 +324,9 @@ func movedReport(sub *v1.Submission, review *v1.SubmissionReview, name string) *
 	}
 	if len(sub.Spec.Attachments) > 0 {
 		// The move copies the files, so the report reconciler only deletes
-		// them.
+		// them, and not while the move is copying.
 		controllerutil.AddFinalizer(rep, AttachmentsFinalizer)
+		controllerutil.AddFinalizer(rep, MoveFinalizer)
 	}
 	return rep
 }
