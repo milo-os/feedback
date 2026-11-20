@@ -1,0 +1,76 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: security
+spec:
+  description: |
+    Moving a submission to the security track (MoveToSecurity), with the
+    submitter other-user (test-user's feedback is left to the other tests so
+    the 30s submission limit isn't reached).
+
+      - A report the move didn't create already has the moved report's name
+        (<submission>-<uid>), here one the Security Team logged for an
+        external reporter. The move must leave it alone and keep the
+        submission: the review says Applied=False, ReportNameTaken.
+      - Once that report is deleted, the move goes ahead: the report is owned
+        by the submitter, records where it came from, starts in Received with
+        its triage, and the submission and its review are deleted. The
+        submitter sees the report in their own context; test-user doesn't.
+  steps:
+    - name: name-taken
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              submit other-user e2e-sec
+              uid=$(jqo .metadata.uid)
+              target="e2e-sec-$uid"
+              echo "$target" > "${TMPDIR:-/tmp}/feedback-e2e-security.target"
+              eventually 60 "review exists" jget submissionreview e2e-sec '{.metadata.name}'
+
+              expect 201 "security-user logs an unrelated report with the moved report's name" security-user POST "$(url platform securityreports)" \
+                "{\"apiVersion\":\"feedback.miloapis.com/v1alpha1\",\"kind\":\"SecurityReport\",\"metadata\":{\"name\":\"$target\"},\"spec\":{\"title\":\"Unrelated report\",\"description\":\"Logged from email.\",\"reporter\":{\"email\":\"someone@example.com\"}}}"
+              squat_uid=$(jqo .metadata.uid)
+
+              expect 200 "staff-user moves the submission to security" staff-user PATCH "$(url platform submissionreviews/e2e-sec)" \
+                '{"spec":{"decision":"MoveToSecurity","affected":"connectors"}}'
+              eventually 60 "review says the name is taken" is "False ReportNameTaken" jget submissionreview e2e-sec '{range .status.conditions[?(@.type=="Applied")]}{.status} {.reason}{end}'
+              sleep 10
+              jget submission e2e-sec '{.metadata.name}' >/dev/null || fail "the submission was deleted although its report wasn't created"
+              echo "ok: submission kept"
+              is "$squat_uid" jget securityreport "$target" '{.metadata.uid}' || fail "the existing report was replaced"
+              [ -z "$(jget securityreport "$target" '{.spec.userRef.name}')" ] || fail "the existing report got an owner"
+              [ -z "$(jget securityreport "$target" '{.metadata.annotations.feedback\.miloapis\.com/moved-from-submission}')" ] || fail "the existing report was marked as moved"
+              echo "ok: existing report untouched"
+      cleanup:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              [ -f "${TMPDIR:-/tmp}/feedback-e2e-security.target" ] && milo delete securityreports.feedback.miloapis.com "$(cat "${TMPDIR:-/tmp}/feedback-e2e-security.target")" --ignore-not-found --wait=false || true
+              milo delete submissions.feedback.miloapis.com e2e-sec --ignore-not-found --wait=false || true
+              milo delete submissionreviews.feedback.miloapis.com e2e-sec --ignore-not-found --wait=false || true
+              rm -f "${TMPDIR:-/tmp}/feedback-e2e-security.target"
+
+    - name: move
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              target=$(cat "${TMPDIR:-/tmp}/feedback-e2e-security.target")
+              expect 200 "security-user deletes the unrelated report" security-user DELETE "$(url platform securityreports/$target)"
+              eventually 90 "the moved report exists, owned by other-user" is other-user jget securityreport "$target" '{.spec.userRef.name}'
+              is e2e-sec jget securityreport "$target" '{.metadata.annotations.feedback\.miloapis\.com/moved-from-submission}' || fail "report doesn't record its submission"
+              is connectors jget securityreport "$target" '{.spec.affected}' || fail "affected not copied"
+              eventually 60 "submission is deleted" gone submission e2e-sec
+              eventually 90 "its review is deleted" gone submissionreview e2e-sec
+              eventually 60 "report is Received" is Received jget securityreport "$target" '{.status.phase}'
+              is Received jget securityreport "$target" '{.status.timeline[0].phase}' || fail "no Received timeline entry"
+              eventually 60 "report has its triage" jget securityreporttriage "$target" '{.metadata.name}'
+
+              expect 200 "other-user sees their report" other-user GET "$(url other-user securityreports/$target)"
+              expect 404 "test-user doesn't" test-user GET "$(url test-user securityreports/$target)"
+              expect 200 "other-user lists reports" other-user GET "$(url other-user securityreports)"
+              [ "$(jqo "[.items[].metadata.name] | index(\"$target\") != null")" = true ] || fail "other-user's list misses the report"

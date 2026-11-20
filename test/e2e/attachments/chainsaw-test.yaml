@@ -1,0 +1,115 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: attachments
+spec:
+  description: |
+    Attachments through feedback-uploads, stored in MinIO (s3:// with a
+    custom endpoint and path-style addressing). The uploads Service is called
+    from a pod in the cluster.
+
+      - test-user uploads a file; it is type-checked and stored under
+        uploads/submission/test-user/.
+      - other-user can't attach test-user's upload; test-user can, and the
+        attachments webhook sets its name and type from the upload.
+      - The operator copies it under submissions/<name>/ and adds its
+        finalizer.
+      - test-user downloads it in their own context; other-user gets 404 in
+        theirs, without a token it's 401; staff-user downloads it in the
+        platform context.
+      - Deleting the submission deletes its files.
+  steps:
+    - name: client
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              if ! infra -n feedback-system rollout status deployment/feedback-uploads --timeout=60s; then
+                infra -n feedback-system logs deployment/feedback-uploads --tail=5 >&2 || true
+                fail "feedback-uploads isn't running"
+              fi
+        - apply:
+            cluster: infra
+            file: client-pod.yaml
+        - wait:
+            cluster: infra
+            apiVersion: v1
+            kind: Pod
+            name: e2e-attachments-client
+            namespace: feedback-system
+            timeout: 120s
+            for:
+              condition:
+                name: Ready
+                value: "true"
+      cleanup:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              milo delete submissions.feedback.miloapis.com e2e-att --ignore-not-found --wait=true --timeout=60s || true
+              milo delete submissionreviews.feedback.miloapis.com e2e-att --ignore-not-found --wait=false || true
+              milo delete submissions.feedback.miloapis.com e2e-att-stolen --ignore-not-found --wait=false || true
+
+    - name: upload-attach-download
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              # in_cluster <caller|-> <curl args...>: curl from the client pod;
+              # prints the HTTP status, the body goes to $OUT.
+              in_cluster() {
+                local who=$1; shift
+                local auth=()
+                [ "$who" = - ] || auth=(-H "Authorization: Bearer $(token "$who")")
+                infra -n feedback-system exec e2e-attachments-client -- \
+                  curl -s -o /tmp/out -w '%{http_code}' "${auth[@]}" "$@"
+                infra -n feedback-system exec e2e-attachments-client -- cat /tmp/out > "$OUT"
+              }
+              UP=http://feedback-uploads.feedback-system.svc.cluster.local
+
+              code=$(in_cluster test-user -X POST -H 'Content-Type: text/html' --data-binary '<script>alert(1)</script>' "$UP/users/test-user/uploads/submissions?name=x.html")
+              [ "$code" = 400 ] || fail "HTML upload: HTTP $code: $(cat $OUT)"
+              echo "ok: HTML refused ($code)"
+              code=$(in_cluster - -X POST -H 'Content-Type: text/plain' --data-binary 'hi' "$UP/users/test-user/uploads/submissions?name=a.txt")
+              [ "$code" = 401 ] || fail "upload without a token: HTTP $code"
+              echo "ok: upload without a token refused ($code)"
+
+              code=$(in_cluster test-user -X POST -H 'Content-Type: text/plain' --data-binary 'hello from the feedback e2e tests' "$UP/users/test-user/uploads/submissions?name=notes.txt")
+              [ "$code" = 201 ] || fail "upload: HTTP $code: $(cat $OUT)"
+              ref=$(jqo .uploadRef)
+              echo "ok: uploaded $ref"
+              minio_ls uploads/submission/test-user/ | grep -q "$ref" || fail "upload $ref isn't in MinIO"
+              echo "ok: upload is in MinIO"
+
+              expect 403 "other-user can't attach test-user's upload" other-user POST "$(url other-user submissions)" \
+                "{\"apiVersion\":\"feedback.miloapis.com/v1alpha1\",\"kind\":\"Submission\",\"metadata\":{\"name\":\"e2e-att-stolen\"},\"spec\":{\"kind\":\"bug\",\"title\":\"stolen\",\"body\":\"x\",\"attachments\":[{\"uploadRef\":\"$ref\"}]}}"
+              submit test-user e2e-att "\"attachments\":[{\"uploadRef\":\"$ref\",\"name\":\"evil.html\",\"contentType\":\"text/html\"}]"
+              [ "$(jqo '.spec.attachments[0] | "\(.name) \(.contentType)"')" = "notes.txt text/plain" ] || fail "attachment not set from the upload: $(jqo .spec.attachments)"
+
+              eventually 60 "operator keeps the files" is feedback.miloapis.com/attachments jget submission e2e-att '{.metadata.finalizers[0]}'
+              minio_ls submissions/e2e-att/ | grep -q "$ref" || fail "attachment isn't under submissions/e2e-att/"
+              echo "ok: attachment copied under submissions/e2e-att/"
+
+              path="submissions/e2e-att/attachments/$ref"
+              code=$(in_cluster test-user "$UP/users/test-user/$path")
+              [ "$code" = 200 ] || fail "owner download: HTTP $code: $(cat $OUT)"
+              [ "$(cat $OUT)" = "hello from the feedback e2e tests" ] || fail "downloaded: $(cat $OUT)"
+              echo "ok: test-user downloads it"
+              code=$(in_cluster other-user "$UP/users/other-user/$path")
+              [ "$code" = 404 ] || fail "other-user download in their context: HTTP $code: $(cat $OUT)"
+              echo "ok: other-user gets 404"
+              code=$(in_cluster - "$UP/users/test-user/$path")
+              [ "$code" = 401 ] || fail "download without a token: HTTP $code"
+              echo "ok: no token gets 401"
+              code=$(in_cluster staff-user "$UP/$path")
+              [ "$code" = 200 ] || fail "staff download: HTTP $code: $(cat $OUT)"
+              echo "ok: staff-user downloads it in the platform context"
+
+              milo delete submissions.feedback.miloapis.com e2e-att --wait=true --timeout=60s
+              echo "ok: submission deleted"
+              n=$(minio_ls submissions/e2e-att/ | wc -l | tr -d ' ')
+              [ "$n" = 0 ] || fail "$n files left under submissions/e2e-att/"
+              echo "ok: its files are gone"

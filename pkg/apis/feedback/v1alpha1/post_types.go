@@ -82,6 +82,9 @@ type Post struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// Spec holds the fields staff control. It defaults to {} so every post
+	// has one, which the search index condition on spec.hidden needs.
+	// +kubebuilder:default={}
 	Spec   PostSpec   `json:"spec,omitempty"`
 	Status PostStatus `json:"status,omitempty"`
 }

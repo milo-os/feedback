@@ -9,6 +9,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -114,6 +115,30 @@ func TestCRDs(t *testing.T) {
 			if p.Spec.Hidden {
 				t.Errorf("hidden post %s listed", p.Name)
 			}
+		}
+	})
+
+	t.Run("a post created without spec is served with one", func(t *testing.T) {
+		// The search index condition reads spec.hidden and can't evaluate it
+		// on an object with no spec, so the CRD defaults spec to {}.
+		u := &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": v1.SchemeGroupVersion.String(),
+			"kind":       "Post",
+			"metadata":   map[string]any{"name": "a.b.no-spec"},
+		}}
+		if err := c.Create(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := u.Object["spec"].(map[string]any); !ok {
+			t.Errorf("create response has no spec: %v", u.Object)
+		}
+		got := &unstructured.Unstructured{}
+		got.SetGroupVersionKind(v1.SchemeGroupVersion.WithKind("Post"))
+		if err := c.Get(ctx, client.ObjectKey{Name: "a.b.no-spec"}, got); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := got.Object["spec"].(map[string]any); !ok {
+			t.Errorf("stored post has no spec: %v", got.Object)
 		}
 	})
 
