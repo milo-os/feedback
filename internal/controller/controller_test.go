@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/config"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -606,6 +608,101 @@ func TestSecurityReports(t *testing.T) {
 		}
 		decide(t, sub)
 		moved(t, sub, ref, rep)
+	})
+
+	t.Run("a report deleted while its files are copied keeps none of them", func(t *testing.T) {
+		sub, ref := submit(t, "sub-sec-deleted")
+		name := v1.MovedReportName(sub.Name, sub.UID)
+		copying, resume := make(chan struct{}, 4), make(chan struct{})
+		hook := func(report string) {
+			if report == name {
+				copying <- struct{}{}
+				<-resume
+			}
+		}
+		beforeMoveCopy.Store(&hook)
+		t.Cleanup(func() { beforeMoveCopy.Store(nil); close(resume) })
+		waitForCopy := func(what string) {
+			t.Helper()
+			select {
+			case <-copying:
+			case <-time.After(15 * time.Second):
+				t.Fatalf("the move never started %s", what)
+			}
+		}
+		noReportFile := func(when string) {
+			t.Helper()
+			if _, err := files.Get(ctx, attachments.SecurityReport, name, "", ref); !errors.Is(err, attachments.ErrNotFound) {
+				t.Fatalf("%s: the report has a copy of the file: %v", when, err)
+			}
+		}
+
+		decide(t, sub)
+		waitForCopy("copying")
+		first := &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		if err := get(first); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.Delete(ctx, first); err != nil {
+			t.Fatal(err)
+		}
+		// The report waits for the copy instead of cleaning up under it.
+		time.Sleep(time.Second)
+		if err := get(first); err != nil || first.DeletionTimestamp == nil {
+			t.Fatalf("the report didn't wait for the copy: %v", err)
+		}
+
+		resume <- struct{}{}
+		// The report goes, taking every copy with it; the submission stays
+		// and is moved again, into a new report.
+		waitForCopy("moving again")
+		noReportFile("once the deleted report has gone")
+		if err := get(&v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}); err != nil {
+			t.Fatalf("submission: %v", err)
+		}
+		if _, err := files.Get(ctx, attachments.Submission, sub.Name, "", ref); err != nil {
+			t.Fatalf("submission's file: %v", err)
+		}
+		resume <- struct{}{}
+		rep := &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		moved(t, sub, ref, rep)
+		if rep.UID == first.UID {
+			t.Errorf("moved into the deleted report")
+		}
+		if controllerutil.ContainsFinalizer(rep, MoveFinalizer) {
+			t.Errorf("the move still holds the report")
+		}
+	})
+
+	t.Run("a report is let go when its submission is deleted mid-move", func(t *testing.T) {
+		sub, _ := submit(t, "sub-sec-gone")
+		// As if the operator stopped after creating the report, and then
+		// staff deleted the submission.
+		rep := movedReport(sub, &v1.SubmissionReview{}, v1.MovedReportName(sub.Name, sub.UID))
+		if err := c.Create(ctx, rep); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.Delete(ctx, sub); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "let go", func() error {
+			if err := get(rep); err != nil {
+				return err
+			}
+			if controllerutil.ContainsFinalizer(rep, MoveFinalizer) {
+				return errorf("still held")
+			}
+			return nil
+		})
+		if err := c.Delete(ctx, rep); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "deleted", func() error {
+			if err := get(rep); !apierrors.IsNotFound(err) {
+				return errorf("report still there")
+			}
+			return nil
+		})
 	})
 
 	for _, tc := range []struct {

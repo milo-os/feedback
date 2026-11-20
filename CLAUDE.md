@@ -43,6 +43,12 @@ datum-cloud/enhancements#943.
   rules for deletes use `objectRef` or an audit annotation (see
   `config/milo/activity/post-ref.yaml`); the activity service's CEL has no
   string functions, so names can't be split.
+- Someone may report a vulnerability through the general form. Triage runs a
+  check inside the operator first; a submission it flags
+  (`status.triage.likelySecurityIssue`) is never sent to the AI gateway or any
+  other outside service, and staff move it to the security track. Text typed
+  into the general form, including similar-posts search queries, is audited at
+  `Metadata` only.
 
 ## Commands
 
