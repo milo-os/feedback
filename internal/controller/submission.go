@@ -44,6 +44,11 @@ func (r *SubmissionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err := r.Get(ctx, req.NamespacedName, &sub); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	if sub.DeletionTimestamp != nil && controllerutil.ContainsFinalizer(&sub, MoveFinalizer) {
+		// A move is copying from it. Its files are deleted once the move lets
+		// go, which requeues this.
+		return ctrl.Result{}, nil
+	}
 	if done, err := keepAttachments(ctx, r.Client, r.Files, attachments.Submission, &sub, sub.Spec.UserRef.Name, sub.Spec.Attachments); done || err != nil {
 		return ctrl.Result{}, err
 	}

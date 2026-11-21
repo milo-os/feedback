@@ -79,8 +79,9 @@ func (r *SecurityReportReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 }
 
 // moveHolds reports whether a move still holds rep with MoveFinalizer. The
-// move lets go once it has copied its files; if the submission it was moving
-// is gone first, nothing else will, so this lets go instead.
+// move holds its submission too and lets go of the report first, so the
+// submission is only gone while the report is held if someone removed its
+// finalizers by hand. Nothing else would let go then, so this does.
 func (r *SecurityReportReconciler) moveHolds(ctx context.Context, rep *v1.SecurityReport) (bool, error) {
 	if !controllerutil.ContainsFinalizer(rep, MoveFinalizer) {
 		return false, nil
@@ -171,8 +172,9 @@ func (r *SecurityReportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // name. The submission is kept.
 const ReasonReportNameTaken = "ReportNameTaken"
 
-// MoveFinalizer is on a report while a move copies files under it, so
-// deleting the report can't clean up its files before the last copy lands.
+// MoveFinalizer is on a submission and its report while a move copies files
+// between them, so deleting either can't clean up its files before the last
+// copy lands. Only MoveReconciler removes it, report first.
 const MoveFinalizer = "feedback.miloapis.com/move"
 
 // beforeMoveCopy, if set, runs just before a move copies files to report.
@@ -189,9 +191,16 @@ var beforeMoveCopy atomic.Pointer[func(report string)]
 // left alone, and so is the submission: the review gets Applied=False,
 // ReportNameTaken, and the move is tried again when a report is deleted.
 //
-// While it copies, the move holds the report with MoveFinalizer. If the
+// While it copies, the move holds the submission and the report with
+// MoveFinalizer, and lets go of the report before the submission. If the
 // report is deleted before the move lets go, the submission is kept and,
-// once the report has gone with its files, moved again.
+// once the report has gone with its files, moved again. If the submission is
+// deleted, the move still finishes into the report.
+//
+// A move runs inside one reconcile of its submission, and the controller
+// never reconciles the same submission twice at once. So a reconcile that
+// finds a held submission being deleted knows no copy for it is running: the
+// move was interrupted, and it finishes it and lets go.
 type MoveReconciler struct {
 	client.Client
 	Options
@@ -199,16 +208,16 @@ type MoveReconciler struct {
 
 // Reconcile implements reconcile.Reconciler.
 func (r *MoveReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var review v1.SubmissionReview
-	if err := r.Get(ctx, req.NamespacedName, &review); err != nil || review.Spec.Decision != v1.ReviewDecisionMoveToSecurity {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
 	var sub v1.Submission
 	if err := r.Get(ctx, req.NamespacedName, &sub); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if sub.DeletionTimestamp != nil {
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, r.finishInterrupted(ctx, &sub)
+	}
+	var review v1.SubmissionReview
+	if err := r.Get(ctx, req.NamespacedName, &review); err != nil || review.Spec.Decision != v1.ReviewDecisionMoveToSecurity {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if len(sub.Spec.Attachments) > 0 {
 		if r.Files == nil {
@@ -247,11 +256,21 @@ func (r *MoveReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		// The moved report is being deleted before the submission was. Let
 		// go of it, wait for it to go (its deletion requeues this) and create
 		// it again.
-		_, err := r.letGo(ctx, &rep)
-		return ctrl.Result{}, err
+		if _, err := r.letGo(ctx, &rep); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, r.release(ctx, &sub)
 	}
 
 	if len(sub.Spec.Attachments) > 0 {
+		if !controllerutil.ContainsFinalizer(&sub, MoveFinalizer) {
+			// Update, not patch: it fails if the submission has started being
+			// deleted since it was read.
+			controllerutil.AddFinalizer(&sub, MoveFinalizer)
+			if err := r.Update(ctx, &sub); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		if !controllerutil.ContainsFinalizer(&rep, MoveFinalizer) {
 			// A retry after letting go. Update, not patch: it fails if the
 			// report has started being deleted since it was read.
@@ -267,13 +286,69 @@ func (r *MoveReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			return ctrl.Result{}, fmt.Errorf("copying attachments: %w", err)
 		}
 		deleting, err := r.letGo(ctx, &rep)
-		if err != nil || deleting {
-			// Deleted during the copy: its cleanup takes the copies, and the
-			// submission is kept to move again.
+		if err != nil {
 			return ctrl.Result{}, err
 		}
+		if deleting {
+			// Deleted during the copy: its cleanup takes the copies, and the
+			// submission is kept to move again.
+			return ctrl.Result{}, r.release(ctx, &sub)
+		}
 	}
-	return ctrl.Result{}, client.IgnoreNotFound(r.Delete(ctx, &sub, client.Preconditions{UID: &sub.UID}))
+	if err := r.Delete(ctx, &sub, client.Preconditions{UID: &sub.UID}); client.IgnoreNotFound(err) != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, r.release(ctx, &sub)
+}
+
+// finishInterrupted finishes a move whose held submission is being deleted.
+// No copy is running (see MoveReconciler), so whatever the move had started
+// is finished here: if its report is still there, the files are copied again,
+// which is idempotent, and the report is let go with them. If the report is
+// being deleted too, letting go hands its copies to its cleanup. The
+// submission is let go last, so its cleanup can't take the files first.
+func (r *MoveReconciler) finishInterrupted(ctx context.Context, sub *v1.Submission) error {
+	if !controllerutil.ContainsFinalizer(sub, MoveFinalizer) {
+		return nil
+	}
+	var rep v1.SecurityReport
+	err := r.Get(ctx, types.NamespacedName{Name: v1.MovedReportName(sub.Name, sub.UID)}, &rep)
+	switch {
+	case apierrors.IsNotFound(err):
+	case err != nil:
+		return err
+	case movedFrom(&rep, sub) && controllerutil.ContainsFinalizer(&rep, MoveFinalizer):
+		if rep.DeletionTimestamp == nil && len(sub.Spec.Attachments) > 0 && r.Files != nil {
+			if err := r.Files.CopyParent(ctx, attachments.Submission, attachments.SecurityReport, sub.Name, rep.Name); err != nil {
+				return fmt.Errorf("copying attachments: %w", err)
+			}
+		}
+		if _, err := r.letGo(ctx, &rep); err != nil {
+			return err
+		}
+	}
+	return r.release(ctx, sub)
+}
+
+// release removes MoveFinalizer from sub. Each patch carries the
+// resourceVersion it read, so it never writes back a finalizer list someone
+// else has changed since.
+func (r *MoveReconciler) release(ctx context.Context, sub *v1.Submission) error {
+	first := true
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if !first {
+			if err := r.Get(ctx, client.ObjectKeyFromObject(sub), sub); err != nil {
+				return err
+			}
+		}
+		first = false
+		patch := client.MergeFromWithOptions(sub.DeepCopy(), client.MergeFromWithOptimisticLock{})
+		if !controllerutil.RemoveFinalizer(sub, MoveFinalizer) {
+			return nil
+		}
+		return r.Patch(ctx, sub, patch)
+	})
+	return client.IgnoreNotFound(err)
 }
 
 // letGo removes MoveFinalizer from rep, and reports whether rep is being
@@ -370,12 +445,17 @@ func (r *MoveReconciler) pendingMoves(ctx context.Context, _ client.Object) []re
 }
 
 // SetupWithManager registers the reconciler for reviews with a
-// MoveToSecurity decision, and for deleted reports.
+// MoveToSecurity decision, for submissions a move holds, and for deleted
+// reports. Reviews and submissions share names, so both map to one key per
+// submission.
 func (r *MoveReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("move-to-security").
 		For(&v1.SubmissionReview{}, builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 			return obj.(*v1.SubmissionReview).Spec.Decision == v1.ReviewDecisionMoveToSecurity
+		}))).
+		Watches(&v1.Submission{}, &handler.EnqueueRequestForObject{}, builder.WithPredicates(predicate.NewPredicateFuncs(func(obj client.Object) bool {
+			return controllerutil.ContainsFinalizer(obj, MoveFinalizer)
 		}))).
 		Watches(&v1.SecurityReport{}, handler.EnqueueRequestsFromMapFunc(r.pendingMoves), builder.WithPredicates(predicate.Funcs{
 			CreateFunc:  func(event.CreateEvent) bool { return false },

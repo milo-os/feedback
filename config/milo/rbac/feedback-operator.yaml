@@ -20,7 +20,7 @@ rules:
     resources: [votes, subscriptions, submissionreviews, securityreports, securityreporttriages, securityacknowledgements, feedbackdigests]
     verbs: [create, update, patch, delete]
   # delete for reports moved to the security track; update and patch only to
-  # add and remove the attachments finalizer.
+  # add and remove the attachments and move finalizers.
   - apiGroups: [feedback.miloapis.com]
     resources: [submissions]
     verbs: [update, patch, delete]

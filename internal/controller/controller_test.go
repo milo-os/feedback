@@ -674,6 +674,97 @@ func TestSecurityReports(t *testing.T) {
 		}
 	})
 
+	// pauseMoveCopy blocks moves to sub's report just before they copy, until
+	// the returned resume is called. waitForCopy waits for the move to get
+	// there.
+	pauseMoveCopy := func(t *testing.T, sub *v1.Submission) (waitForCopy func(), resume func()) {
+		t.Helper()
+		name := v1.MovedReportName(sub.Name, sub.UID)
+		copying, unblock := make(chan struct{}, 4), make(chan struct{})
+		hook := func(report string) {
+			if report == name {
+				copying <- struct{}{}
+				<-unblock
+			}
+		}
+		beforeMoveCopy.Store(&hook)
+		var once sync.Once
+		resume = func() { once.Do(func() { close(unblock) }) }
+		t.Cleanup(func() { beforeMoveCopy.Store(nil); resume() })
+		return func() {
+			t.Helper()
+			select {
+			case <-copying:
+			case <-time.After(15 * time.Second):
+				t.Fatal("the move never started copying")
+			}
+		}, resume
+	}
+	// terminating fails unless obj still exists and is being deleted.
+	terminating := func(t *testing.T, obj client.Object, what string) {
+		t.Helper()
+		if err := get(obj); err != nil || obj.GetDeletionTimestamp() == nil {
+			t.Fatalf("%s didn't wait for the copy: %v", what, err)
+		}
+	}
+
+	t.Run("deleting the submission and its report during the copy leaves no files", func(t *testing.T) {
+		sub, ref := submit(t, "sub-sec-both-deleted")
+		waitForCopy, resume := pauseMoveCopy(t, sub)
+		decide(t, sub)
+		waitForCopy()
+		rep := &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: v1.MovedReportName(sub.Name, sub.UID)}}
+		if err := get(rep); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.Delete(ctx, sub); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.Delete(ctx, rep); err != nil {
+			t.Fatal(err)
+		}
+		// Neither cleanup runs while the copy is outstanding.
+		time.Sleep(time.Second)
+		terminating(t, &v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}, "the submission")
+		terminating(t, &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: rep.Name}}, "the report")
+
+		resume()
+		eventually(t, "both gone with their files", func() error {
+			if err := get(&v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}); !apierrors.IsNotFound(err) {
+				return errorf("submission still there")
+			}
+			if err := get(&v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: rep.Name}}); !apierrors.IsNotFound(err) {
+				return errorf("report still there")
+			}
+			if _, err := files.Get(ctx, attachments.Submission, sub.Name, "", ref); !errors.Is(err, attachments.ErrNotFound) {
+				return errorf("the submission's file is still stored")
+			}
+			if _, err := files.Get(ctx, attachments.SecurityReport, rep.Name, "", ref); !errors.Is(err, attachments.ErrNotFound) {
+				return errorf("the report's copy is still stored")
+			}
+			return nil
+		})
+	})
+
+	t.Run("deleting the submission during the copy still finishes the move", func(t *testing.T) {
+		sub, ref := submit(t, "sub-sec-source-deleted")
+		waitForCopy, resume := pauseMoveCopy(t, sub)
+		decide(t, sub)
+		waitForCopy()
+		if err := c.Delete(ctx, sub); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Second)
+		terminating(t, &v1.Submission{ObjectMeta: metav1.ObjectMeta{Name: sub.Name}}, "the submission")
+
+		resume()
+		rep := &v1.SecurityReport{ObjectMeta: metav1.ObjectMeta{Name: v1.MovedReportName(sub.Name, sub.UID)}}
+		moved(t, sub, ref, rep)
+		if controllerutil.ContainsFinalizer(rep, MoveFinalizer) {
+			t.Errorf("the move still holds the report")
+		}
+	})
+
 	t.Run("a report is let go when its submission is deleted mid-move", func(t *testing.T) {
 		sub, _ := submit(t, "sub-sec-gone")
 		// As if the operator stopped after creating the report, and then
