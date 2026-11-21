@@ -180,8 +180,10 @@ spec:
                 description: Triage is advisory.
                 properties:
                   draftIssue:
-                    description: DraftIssue is a public title and body with private
-                      details stripped.
+                    description: |-
+                      DraftIssue is a public title and body with private details stripped,
+                      drafted by the AI gateway. Never drafted while LikelySecurityIssue is
+                      set.
                     properties:
                       body:
                         type: string
@@ -198,7 +200,8 @@ spec:
                   likelySecurityIssue:
                     description: |-
                       LikelySecurityIssue flags submissions that should be moved to the
-                      security track.
+                      security track. While it is set, the submission's text and attachments
+                      are never sent to the AI gateway or any other outside service.
                     type: boolean
                   similarPosts:
                     description: SimilarPosts come from a keyword search on the submission.
