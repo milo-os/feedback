@@ -1,0 +1,23 @@
+# Follows are logged in full, so the follow rule reads the post from the
+# request. A delete's audit event has no subscription in it, so the unfollow
+# rule reads the post from the audit annotation post-ref.yaml adds. Follows
+# the operator creates when someone votes or their submission is decided are
+# system: actors and don't appear.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: feedback.miloapis.com-subscriptions
+spec:
+  resource:
+    apiGroup: feedback.miloapis.com
+    kind: Subscription
+  auditRules:
+    - name: follow
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.requestObject.spec) && has(audit.requestObject.spec.postRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} followed {{ link(audit.requestObject.spec.postRef.name, {'apiGroup': 'feedback.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'posts', 'name': audit.requestObject.spec.postRef.name}) }}"
+    - name: unfollow
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.annotations) && 'post-ref.feedback.miloapis.com/post' in audit.annotations && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} stopped following {{ link(audit.annotations['post-ref.feedback.miloapis.com/post'], {'apiGroup': 'feedback.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'posts', 'name': audit.annotations['post-ref.feedback.miloapis.com/post']}) }}"
+    - name: unfollow-post-unknown
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} stopped following a post"

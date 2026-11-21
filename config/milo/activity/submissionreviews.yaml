@@ -1,0 +1,14 @@
+# Reviews are logged at Metadata only. Staff decide by updating the review;
+# the decision can't change after that, so an update is the decision.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: feedback.miloapis.com-submissionreviews
+spec:
+  resource:
+    apiGroup: feedback.miloapis.com
+    kind: SubmissionReview
+  auditRules:
+    - name: decide
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} decided on submission {{ link(audit.objectRef.name, audit.objectRef) }}"

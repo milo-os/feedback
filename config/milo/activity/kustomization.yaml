@@ -1,0 +1,25 @@
+# ActivityPolicies: how feedback writes read in activity timelines. Only
+# people's actions appear; the service's own components are system: users.
+# Kinds logged at Metadata (submissions, reviews) have rules that use only
+# the verb and object reference. post-ref.yaml is the admission policy that
+# names the post in vote and subscription delete events.
+#
+# Security reports and their triage have no ActivityPolicy, so they make no
+# activity entries at all. The activity service files an entry under the
+# actor's context and offers no per-entry access check: anyone who can read
+# the platform timeline sees every entry, including a reporter's own, and
+# the Security Team works in the platform context. An entry would tell those
+# readers that a report exists and what staff did with it, which only the
+# Security Team (and the reporter) may know. The audit log keeps the record.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - post-ref.yaml
+  - votes.yaml
+  - subscriptions.yaml
+  - submissions.yaml
+  - submissionreviews.yaml
+  - posts.yaml
+  - feedbacksources.yaml
+  - feedbackprofiles.yaml

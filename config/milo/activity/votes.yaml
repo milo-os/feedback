@@ -1,0 +1,24 @@
+# Votes are logged in full (RequestResponse), so the create rule reads the
+# post from the request. A delete's audit event has no vote in it (the
+# response is a Status, the request DeleteOptions), so the unvote rule reads
+# the post from the audit annotation post-ref.yaml adds; without it, the entry
+# doesn't name the post. The operator's writes (status, votes it gives
+# submitters) are system: actors and don't appear.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: feedback.miloapis.com-votes
+spec:
+  resource:
+    apiGroup: feedback.miloapis.com
+    kind: Vote
+  auditRules:
+    - name: vote
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.requestObject.spec) && has(audit.requestObject.spec.postRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} voted on {{ link(audit.requestObject.spec.postRef.name, {'apiGroup': 'feedback.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'posts', 'name': audit.requestObject.spec.postRef.name}) }}"
+    - name: unvote
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.annotations) && 'post-ref.feedback.miloapis.com/post' in audit.annotations && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} removed their vote on {{ link(audit.annotations['post-ref.feedback.miloapis.com/post'], {'apiGroup': 'feedback.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'posts', 'name': audit.annotations['post-ref.feedback.miloapis.com/post']}) }}"
+    - name: unvote-post-unknown
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} removed a vote"
