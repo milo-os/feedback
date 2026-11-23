@@ -18,8 +18,8 @@ webhooks.
 
 The CRDs are defined. The operator sets owners and reviewers in admission,
 reconciles votes, follows, submission reviews and security reports, and
-stores attachments. Triage, notifications and digests, audit and search
-config are tracked as sub-issues of the epic.
+stores attachments. Activity and search are configured. Triage,
+notifications and digests are tracked as sub-issues of the epic.
 
 | Resource | Who writes it | Who reads it |
 | --- | --- | --- |
@@ -108,6 +108,45 @@ Milo audits feedback writes like any other CRD. Its audit policy (in `datum-clou
 
 `config/milo/activity` holds an `ActivityPolicy` per kind, so people's actions read as sentences in activity timelines: voting, following, sending feedback, staff decisions, hiding posts and editing sources. The service's own components are `system:` users and are left out. A delete's audit event carries a `Status`, not the deleted object, so a `ValidatingAdmissionPolicy` (`post-ref.yaml`) adds the post's name to vote and subscription deletes as the audit annotation `post-ref.feedback.miloapis.com/post`, and the unvote and unfollow rules read it there. Security reports and their triage have no `ActivityPolicy`: the activity service shows every entry to anyone who can read the platform timeline, with no per-entry access check, so an entry would reveal that a report exists. `test/config` compiles every rule in the activity service's CEL environment, checks that rules never read bodies a metadata-only kind or a delete won't have, renders delete events written by an envtest API server, and checks no policy covers security reports.
 
+## Search
+
+`config/milo/search` has a `ResourceIndexPolicy` for `Post`, `Release` and `ChangelogEntry`.
+
+- **What's searchable:** title, summary or body, categories, labels and state. Derived fields (`votes`, `trendingScore`, `delivery`) aren't indexed, since they change as side effects and would go stale.
+- **Hidden posts:** the policy's condition leaves them out, and hiding a post removes it from the index. The condition reads `spec.hidden`, and the indexer can't evaluate it on an object with no `spec` (it logs an error and treats the post as not matching, which also deletes it from the index), so the `Post` CRD defaults `spec` to `{}`.
+- **Never indexed:** submissions, reviews, security reports, votes and follows.
+- **What it relies on:** the indexer reads objects from Milo's audit log, so it needs Milo to log feedback writes at `RequestResponse` (see Audit and activity).
+- **Draft text in queries:** similar-posts search sends a draft's title and body as the query, and someone may type a vulnerability into the general form before staff move it to the security track. Milo audits `ResourceSearchQuery` at `Metadata` only (its own rule, datum-cloud/infra#9711), so query text never reaches the audit log, and the search service only logs it at debug verbosity, which isn't enabled.
+- **Measuring lag:** `hack/search-lag.sh <post>` measures how long a post change takes to reach the index. Run it against staging with a platform-root kubeconfig; it hides a visible post briefly and always puts back its original `spec.hidden`.
+
+### Who can search posts
+
+The search service filters every `ResourceSearchQuery` by the caller's Milo context, taken from the `iam.miloapis.com/parent-type` and `parent-name` user extras (`internal/registry/resourcesearchquery` in `milo-os/search`):
+
+- **Platform root** (no parent context): no filter. The query sees every indexed document from every tenant.
+- **User, organization or project control plane**: documents stored under that same user, organization or project, plus, for indexes whose policy sets `visibility: AllContexts` (milo-os/search#172), documents stored under the platform root.
+
+feedback-sync and the operator write posts, releases and changelog entries at the platform root, and every policy in `config/milo/search` sets `visibility: AllContexts`, so a query in any context can find them. That's safe because everything in these indexes may be read by any signed-in user: hidden posts are left out by the posts policy's condition, and nothing private is indexed. `test/config` checks every policy sets it.
+
+**Search serves `ResourceSearchQuery` at the platform root and in each user's own context** (milo-os/search#175). Organization and project control planes have no search API. In their own context a user finds visible posts, releases and changelog entries, and otherwise only their own documents; Milo accepts a user's control plane only from a caller with permission on that user, so no one can query another user's context.
+
+| Caller | How it searches posts |
+| --- | --- |
+| datum.net | its server's service account, at the platform root, so anonymous visitors never call Milo |
+| feedback-operator (submission triage) | its own identity, at the platform root |
+| cloud portal | the user's token, in the user's context |
+| `datumctl`, Patch | the user's credentials, in the user's context |
+
+In their own context a user needs `search.miloapis.com/resourcesearchqueries.create` on their User (search's `search.miloapis.com-searcher` role). On staging every user gets it through `iam-user-self-manage` (datum-cloud/infra#9715); production doesn't grant it yet.
+
+A server searching at the platform root needs the same permission there. That isn't limited to feedback: search doesn't check access per object or per kind, and a platform-root query with no `targetResources` searches every index across every tenant. So:
+
+- Never grant it to end users at the platform root.
+- Always set `targetResources` to the feedback kinds, and never pass through targets or tenant filters a client supplies.
+- Don't filter on the result's tenant. Milo marks root requests as scope `global`, so posts indexed from the audit log carry tenant type `Global` while a reindex stores `platform`.
+
+Nothing in `config/milo` grants it at the platform root yet. `hack/search-scope.sh` checks the behavior above against a real environment.
+
 ## Roles
 
 | Role | For |
@@ -139,10 +178,14 @@ config/base/              operator and uploads Deployments, Services, leader ele
 config/components/        milo-integration: Milo kubeconfig, client and webhook certificates
 config/milo/              applied to Milo: IAM (iam/), RBAC for the service's
                           components (rbac/), webhook config (webhook/),
-                          activity rules (activity/), and optional role
-                          bindings (bindings/)
+                          activity rules (activity/), search index policies
+                          (search/), and optional role bindings (bindings/)
 config/samples/           an example of every resource
+hack/search-lag.sh        measures how long a post change takes to reach search
+hack/search-scope.sh      checks which Milo contexts can find a post in search
 test/config/              checks config/ against the CRDs
+test/e2e/                 Chainsaw end-to-end tests in kind (see End-to-end tests)
+hack/e2e/                 deploys the end-to-end environment
 ```
 
 ## Development
@@ -153,6 +196,71 @@ task test       # unit tests, plus CRD tests against an envtest API server
 task generate   # after changing types in pkg/apis: deepcopy and CRDs
 task docker-build
 ```
+
+### End-to-end tests
+
+`task e2e:up` builds a kind cluster from
+[datum-cloud/test-infra](https://github.com/datum-cloud/test-infra) (cert-manager,
+Envoy Gateway, Flux), deploys Milo into it from a Milo checkout, and installs
+feedback in that Milo. `task e2e:test` runs the [Chainsaw](https://kyverno.github.io/chainsaw/)
+tests in `test/e2e/` against it. Docker, kind, kubectl, kustomize, jq and yq
+must be installed.
+
+```bash
+task e2e:up MILO_DIR=../milo   # MILO_DIR defaults to a sibling ../milo
+task e2e:test                  # or: task e2e:test -- test/e2e/votes
+task e2e:redeploy              # rebuild feedback and restart it
+task e2e:down                  # deletes the kind cluster
+```
+
+`e2e:up` runs `e2e:cluster`, `e2e:milo` (Milo's own `dev:build`, `dev:load`
+and `dev:deploy`, then `e2e:milo-identities`), `e2e:build` and `e2e:deploy`;
+each can be run on its own. Milo answers on https://localhost:30443.
+
+What runs where:
+
+- **In Milo:** the CRDs, `config/milo/rbac` and the admission webhooks
+  (with the webhook CA as `caBundle`, since cert-manager can't inject into
+  Milo), and the `post-ref` admission policy from `config/milo/activity`.
+  `config/milo/iam` is checked with a server-side dry run only.
+- **In the cluster** (`config/overlays/e2e`): the operator and
+  `feedback-uploads` (one replica each), a self-signed webhook certificate
+  from cert-manager, MinIO as the attachments bucket through the
+  `s3-attachments` component, and in `milo-system` a stand-in for Milo's
+  audit log processor that logs the audit events Milo sends it.
+- **Identities:** `hack/e2e/milo-identities.sh` adds static tokens to Milo's
+  token file (`config/overlays/e2e/milo/tokens.csv`) for
+  `system:feedback-operator@feedback.miloapis.com`,
+  `system:feedback-uploads@feedback.miloapis.com` and
+  `system:feedback-sync@feedback.miloapis.com` (production uses client
+  certificates for the same usernames), and for `other-user`, `limit-user`,
+  `staff-user` and `security-user` besides Milo's `test-user`.
+
+test-infra's Milo authorizes with Kubernetes RBAC, not Milo IAM. The tests
+grant the IAM roles' permissions as ClusterRoles instead
+(`hack/e2e/iam-rbac.sh`): `feedback.miloapis.com-user` to every signed-in
+user, `-reviewer` to `staff-user` and `-security-team` to `security-user`.
+RBAC can't scope a grant to a user's own context, so the tests don't cover
+what Milo IAM decides by context: for example, that a user can't act in
+another user's context, or read a submission's attachments in the platform
+context.
+
+| Test | What it checks |
+| --- | --- |
+| `votes` | owner webhook, `<post>.<user>` names, owner filtering, follows, vote totals, post named in delete audit events |
+| `hidden-posts` | hidden posts invisible to users, visible to staff, no votes on them |
+| `merge-chain` | votes moved along merge chains; a hidden target keeps them, with a condition and no hot loop |
+| `submissions` | review created, reviewer recorded, Rejected and Approved carried out |
+| `rate-limit` | 429 after the submission limit (`--submission-window=30s` here) |
+| `attachments` | upload, attach, copy, download and delete through `feedback-uploads` and MinIO, called from inside the cluster |
+| `security` | MoveToSecurity leaves an unrelated report with the target name alone, then moves once it's gone |
+| `operator-readiness` | the operator isn't ready before its webhook server serves TLS |
+
+Not covered: `feedback-sync` and GitHub (the tests write posts with sync's
+identity), Milo IAM, activity and search (their services don't run in
+test-infra), notifications and digests.
+
+### Running the operator by hand
 
 Run the operator against a Milo you can reach, in a container:
 

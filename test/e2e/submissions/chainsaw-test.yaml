@@ -1,0 +1,88 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: submissions
+spec:
+  description: |
+    Feedback submissions and staff decisions.
+
+      - test-user sends feedback in their own context; the operator creates
+        its SubmissionReview (staff-only) and starts it in PendingReview.
+      - staff-user rejects one: the reviewer webhook records who decided, the
+        reason reaches the submitter.
+      - staff-user approves one: it waits for feedback-sync's post, then links
+        it and has the submitter vote on and follow it.
+  steps:
+    - name: send
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              for s in e2e-sub-reject e2e-sub-approve; do
+                submit test-user $s
+                [ "$(jqo .spec.userRef.name)" = test-user ] || fail "webhook didn't set the owner: $(cat $OUT)"
+              done
+              for s in e2e-sub-reject e2e-sub-approve; do
+                eventually 60 "$s has its review" jget submissionreview $s '{.metadata.name}'
+                eventually 60 "$s is PendingReview" is PendingReview jget submission $s '{.status.phase}'
+                owner=$(jget submissionreview $s '{.metadata.ownerReferences[0].name}')
+                [ "$owner" = $s ] || fail "review $s is owned by '$owner'"
+              done
+              expect 200 "test-user reads their submission" test-user GET "$(url test-user submissions/e2e-sub-reject)"
+              [ "$(jqo .status.phase)" = PendingReview ] || fail "test-user sees phase $(jqo .status.phase)"
+              code=$(call test-user GET "$(url test-user submissionreviews/e2e-sub-reject)")
+              case $code in 403|404) echo "ok: test-user can't read the review ($code)";; *) fail "test-user read the review: HTTP $code";; esac
+              expect 404 "other-user can't read test-user's submission" other-user GET "$(url other-user submissions/e2e-sub-reject)"
+              # The user role has no update (403); the CRD would refuse it too (422).
+              code=$(call test-user PATCH "$(url test-user submissions/e2e-sub-reject)" '{"spec":{"title":"changed"}}')
+              case $code in 403|422) echo "ok: test-user can't change a sent submission ($code)";; *) fail "changing a sent submission: HTTP $code";; esac
+      cleanup:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              for s in e2e-sub-reject e2e-sub-approve; do
+                milo delete submissions.feedback.miloapis.com $s --ignore-not-found --wait=false || true
+                milo delete submissionreviews.feedback.miloapis.com $s --ignore-not-found --wait=false || true
+              done
+              cleanup_posts e2e-sub-approved-post
+
+    - name: reject
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              expect 422 "Rejected needs a reason" staff-user PATCH "$(url platform submissionreviews/e2e-sub-reject)" '{"spec":{"decision":"Rejected"}}'
+              expect 200 "staff-user rejects, naming someone else as reviewer" staff-user PATCH "$(url platform submissionreviews/e2e-sub-reject)" \
+                '{"spec":{"decision":"Rejected","reason":"Already on the roadmap.","reviewer":"someone-else"}}'
+              [ "$(jqo .spec.reviewer)" = staff-user ] || fail "reviewer is $(jqo .spec.reviewer), want staff-user"
+              [ -n "$(jqo '.spec.reviewedAt // empty')" ] || fail "no reviewedAt"
+              eventually 60 "submission is Rejected" is Rejected jget submission e2e-sub-reject '{.status.phase}'
+              is "Already on the roadmap." jget submission e2e-sub-reject '{.status.reason}' || fail "reason not copied: $(jget submission e2e-sub-reject '{.status}')"
+              eventually 60 "review is applied" is true jget submissionreview e2e-sub-reject '{.status.applied}'
+              expect 422 "a decision can't change" staff-user PATCH "$(url platform submissionreviews/e2e-sub-reject)" '{"spec":{"decision":"Approved","publicTitle":"x","publicBody":"y"}}'
+              expect 200 "test-user sees the rejection" test-user GET "$(url test-user submissions/e2e-sub-reject)"
+              [ "$(jqo .status.reason)" = "Already on the roadmap." ] || fail "test-user sees: $(jqo .status)"
+
+    - name: approve
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              expect 422 "Approved needs a public title and body" staff-user PATCH "$(url platform submissionreviews/e2e-sub-approve)" '{"spec":{"decision":"Approved"}}'
+              expect 200 "staff-user approves" staff-user PATCH "$(url platform submissionreviews/e2e-sub-approve)" \
+                '{"spec":{"decision":"Approved","publicTitle":"An approved idea","publicBody":"From the e2e tests."}}'
+              eventually 60 "submission is Approved" is Approved jget submission e2e-sub-approve '{.status.phase}'
+              eventually 60 "review waits for the post" is "False WaitingForPost" jget submissionreview e2e-sub-approve '{range .status.conditions[?(@.type=="Applied")]}{.status} {.reason}{end}'
+
+              # feedback-sync creates the issue and syncs its post.
+              expect 201 "sync creates the post for the submission" sync POST "$(url platform posts)" \
+                '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Post","metadata":{"name":"e2e-sub-approved-post","annotations":{"feedback.miloapis.com/submission":"e2e-sub-approve"}},"spec":{}}'
+              eventually 60 "submission links the post" is e2e-sub-approved-post jget submission e2e-sub-approve '{.status.postRef.name}'
+              eventually 60 "submitter votes on the post" jget vote e2e-sub-approved-post.test-user '{.metadata.name}'
+              eventually 60 "submitter follows the post" is submitted jget subscription e2e-sub-approved-post.test-user '{.spec.reason}'
+              eventually 60 "review is applied" is "true True" jget submissionreview e2e-sub-approve '{.status.applied} {.status.conditions[?(@.type=="Applied")].status}'
+              eventually 60 "the post counts the vote" is 1 jget post e2e-sub-approved-post '{.status.votes.total}'

@@ -1,0 +1,23 @@
+# Chainsaw configuration for the feedback e2e tests (task e2e:test). The
+# default cluster is Milo (KUBECONFIG=test/e2e/kubeconfig-milo); task e2e:test
+# registers "infra", the kind cluster the operator, feedback-uploads and MinIO
+# run in, with --cluster infra=.test-infra/kubeconfig.
+apiVersion: chainsaw.kyverno.io/v1alpha2
+kind: Configuration
+metadata:
+  name: feedback-e2e
+spec:
+  namespace:
+    # Feedback's resources are cluster-scoped; don't create a namespace per
+    # test in Milo.
+    name: default
+  execution:
+    parallel: 4
+    failFast: false
+  timeouts:
+    apply: 30s
+    assert: 120s
+    cleanup: 120s
+    delete: 60s
+    error: 30s
+    exec: 240s

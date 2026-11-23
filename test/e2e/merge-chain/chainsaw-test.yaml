@@ -1,0 +1,83 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: merge-chain
+spec:
+  description: |
+    Merged posts (status.mergedInto, written by feedback-sync).
+
+      - Chain: post B is already merged into C, then A is merged into B. Votes
+        and follows on A end up on C, never on B (which takes no votes). A
+        voter who already voted on C keeps that one vote.
+      - Hidden target: D is merged into E, which is hidden. The vote stays on
+        D, D says why (VotesMoved=False, TargetUnavailable) and the operator
+        doesn't keep rewriting D. Showing E moves the vote.
+  steps:
+    - name: chain
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              for p in a b c; do post e2e-merge-$p; done
+              vote test-user e2e-merge-a
+              vote other-user e2e-merge-a
+              vote test-user e2e-merge-c
+              eventually 60 "A counts 2 votes" is 2 jget post e2e-merge-a '{.status.votes.total}'
+
+              expect 200 "sync merges B into C" sync PATCH "$(url platform posts/e2e-merge-b/status)" '{"status":{"mergedInto":"e2e-merge-c"}}'
+              expect 403 "test-user can't vote on merged B" test-user POST "$(url test-user votes)" \
+                '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Vote","metadata":{"name":"e2e-merge-b.test-user"},"spec":{"postRef":{"name":"e2e-merge-b"}}}'
+              expect 200 "sync merges A into B" sync PATCH "$(url platform posts/e2e-merge-a/status)" '{"status":{"mergedInto":"e2e-merge-b"}}'
+
+              eventually 60 "A's votes are gone" is 0 sh -c "kubectl --kubeconfig $E2E_DIR/kubeconfig-milo get votes.feedback.miloapis.com --field-selector spec.postRef.name=e2e-merge-a -o json | jq '.items | length'"
+              eventually 60 "other-user's vote is on C" jget vote e2e-merge-c.other-user '{.metadata.name}'
+              jget vote e2e-merge-c.test-user '{.metadata.name}' >/dev/null || fail "test-user's vote on C is gone"
+              n=$(milo get votes.feedback.miloapis.com --field-selector spec.postRef.name=e2e-merge-b -o json | jq '.items | length')
+              [ "$n" = 0 ] || fail "$n votes landed on B, which is merged"
+              eventually 60 "other-user follows C" jget subscription e2e-merge-c.other-user '{.metadata.name}'
+              n=$(milo get subscriptions.feedback.miloapis.com --field-selector spec.postRef.name=e2e-merge-a -o json | jq '.items | length')
+              [ "$n" = 0 ] || fail "$n follows left on A"
+
+              eventually 60 "A says its votes moved" is "True Moved" jget post e2e-merge-a '{range .status.conditions[?(@.type=="VotesMoved")]}{.status} {.reason}{end}'
+              jget post e2e-merge-a '{.status.conditions[?(@.type=="VotesMoved")].message}' | grep -q e2e-merge-c || fail "A's condition doesn't name C"
+              eventually 60 "C counts 2 votes" is 2 jget post e2e-merge-c '{.status.votes.total}'
+              eventually 60 "A counts no votes" is 0 sh -c "kubectl --kubeconfig $E2E_DIR/kubeconfig-milo get posts.feedback.miloapis.com e2e-merge-a -o json | jq '.status.votes.total // 0'"
+      cleanup:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              cleanup_posts e2e-merge-a e2e-merge-b e2e-merge-c e2e-merge-d e2e-merge-e
+
+    - name: hidden-target
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              post e2e-merge-d
+              post e2e-merge-e
+              vote test-user e2e-merge-d
+              expect 200 "staff-user hides E" staff-user PATCH "$(url platform posts/e2e-merge-e)" '{"spec":{"hidden":true}}'
+              expect 200 "sync merges D into hidden E" sync PATCH "$(url platform posts/e2e-merge-d/status)" '{"status":{"mergedInto":"e2e-merge-e"}}'
+
+              eventually 60 "D says its votes can't move" is "False TargetUnavailable" jget post e2e-merge-d '{range .status.conditions[?(@.type=="VotesMoved")]}{.status} {.reason}{end}'
+              jget vote e2e-merge-d.test-user '{.metadata.name}' >/dev/null || fail "test-user's vote on D was deleted"
+              gone vote e2e-merge-e.test-user || fail "a vote was created on hidden E"
+              jget post e2e-merge-d '{.status.conditions[?(@.type=="VotesMoved")].message}' | grep -q hidden && fail "the condition says the target is hidden"
+
+              # No hot loop: once the condition is set, D isn't written again.
+              rv=$(jget post e2e-merge-d '{.metadata.resourceVersion}')
+              sleep 20
+              rv2=$(jget post e2e-merge-d '{.metadata.resourceVersion}')
+              [ "$rv" = "$rv2" ] || fail "post D keeps changing (resourceVersion $rv -> $rv2): $(milo get posts.feedback.miloapis.com e2e-merge-d -o yaml)"
+              echo "ok: D unchanged for 20s"
+              n=$(infra -n feedback-system logs deployment/feedback-operator --since=20s | grep -c '"controller":"merge"' || true)
+              echo "merge reconciler log lines in the last 20s: $n"
+              [ "$n" -le 5 ] || fail "the merge reconciler logged $n lines in 20s with nothing to do"
+
+              expect 200 "staff-user shows E" staff-user PATCH "$(url platform posts/e2e-merge-e)" '{"spec":{"hidden":false}}'
+              eventually 60 "test-user's vote moves to E" jget vote e2e-merge-e.test-user '{.metadata.name}'
+              eventually 60 "test-user's vote on D is gone" gone vote e2e-merge-d.test-user
+              eventually 60 "D says its votes moved" is "True Moved" jget post e2e-merge-d '{range .status.conditions[?(@.type=="VotesMoved")]}{.status} {.reason}{end}'

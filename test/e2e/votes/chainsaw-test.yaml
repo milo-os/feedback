@@ -1,0 +1,110 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: votes
+spec:
+  description: |
+    Votes: who owns them, how they're named, who sees them, and the totals.
+
+      - test-user votes in their own context without naming an owner; the
+        owner webhook sets spec.userRef to them.
+      - The name must be <post>.<user>: a vote named for another user, or
+        claiming another user as owner, is refused, as is a vote made outside
+        a user context.
+      - Listing in their context returns only their votes, even when they ask
+        for another user's; getting another user's vote is 404.
+      - The operator follows the post for each voter and tallies the post's
+        status.votes, and recounts when a vote is deleted.
+  steps:
+    - name: owner-and-name
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              post e2e-votes
+              vote test-user e2e-votes
+              [ "$(jqo .spec.userRef.name)" = test-user ] || fail "webhook didn't set spec.userRef: $(cat $OUT)"
+
+              # Claiming another owner: the webhook replaces spec.userRef with
+              # the caller, and then the name no longer matches.
+              code=$(call test-user POST "$(url test-user votes)" \
+                '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Vote","metadata":{"name":"e2e-votes.other-user"},"spec":{"postRef":{"name":"e2e-votes"},"userRef":{"name":"other-user"}}}')
+              case $code in 403|422) echo "ok: vote for another user refused ($code)";; *) fail "vote for another user: HTTP $code: $(cat $OUT)";; esac
+              gone votes e2e-votes.other-user || fail "a vote for other-user was created by test-user"
+
+              expect 422 "vote not named <post>.<user>" test-user POST "$(url test-user votes)" \
+                '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Vote","metadata":{"name":"my-vote"},"spec":{"postRef":{"name":"e2e-votes"}}}'
+              expect 403 "vote outside a user context" test-user POST "$(url platform votes)" \
+                '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Vote","metadata":{"name":"e2e-votes.test-user"},"spec":{"postRef":{"name":"e2e-votes"},"userRef":{"name":"test-user"}}}'
+              expect 403 "vote on a post that doesn't exist" test-user POST "$(url test-user votes)" \
+                '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Vote","metadata":{"name":"e2e-votes-missing.test-user"},"spec":{"postRef":{"name":"e2e-votes-missing"}}}'
+              expect 409 "second vote on the same post" test-user POST "$(url test-user votes)" \
+                '{"apiVersion":"feedback.miloapis.com/v1alpha1","kind":"Vote","metadata":{"name":"e2e-votes.test-user"},"spec":{"postRef":{"name":"e2e-votes"}}}'
+      cleanup:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              cleanup_posts e2e-votes
+
+    - name: who-sees-what
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              vote other-user e2e-votes
+
+              # Other tests run alongside; look at this test's post only.
+              expect 200 "test-user lists votes" test-user GET "$(url test-user votes)"
+              names=$(jqo '[.items[].metadata.name | select(startswith("e2e-votes."))] | join(" ")')
+              [ "$names" = e2e-votes.test-user ] || fail "test-user listed: $names"
+              expect 200 "test-user lists other-user's votes by field selector" test-user GET \
+                "$(url test-user 'votes?fieldSelector=spec.userRef.name%3Dother-user')"
+              [ "$(jqo '[.items[] | select(.spec.userRef.name != "test-user")] | length')" = 0 ] || fail "test-user listed other-user's votes: $(jqo '[.items[].metadata.name]')"
+              expect 404 "test-user gets other-user's vote" test-user GET "$(url test-user votes/e2e-votes.other-user)"
+              expect 404 "test-user deletes other-user's vote" test-user DELETE "$(url test-user votes/e2e-votes.other-user)"
+              expect 200 "test-user gets own vote" test-user GET "$(url test-user votes/e2e-votes.test-user)"
+
+              expect 200 "other-user lists votes" other-user GET "$(url other-user votes)"
+              names=$(jqo '[.items[].metadata.name | select(startswith("e2e-votes."))] | join(" ")')
+              [ "$names" = e2e-votes.other-user ] || fail "other-user listed: $names"
+
+    - name: follows-and-totals
+      try:
+        - script:
+            shell: bash
+            content: |
+              . ../lib.sh
+              eventually 60 "post total is 2" is 2 jget post e2e-votes '{.status.votes.total}'
+              is 2 jget post e2e-votes '{.status.votes.datum}' || fail "datum votes: $(jget post e2e-votes '{.status.votes}')"
+              for u in test-user other-user; do
+                eventually 30 "$u follows the post" is voted jget subscription "e2e-votes.$u" '{.spec.reason}'
+                eventually 30 "$u's vote is marked subscribed" is true jget vote "e2e-votes.$u" '{.status.subscribed}'
+              done
+              expect 200 "test-user sees their follow" test-user GET "$(url test-user subscriptions/e2e-votes.test-user)"
+
+              expect 200 "test-user deletes their vote" test-user DELETE "$(url test-user votes/e2e-votes.test-user)"
+              eventually 60 "post total drops to 1" is 1 jget post e2e-votes '{.status.votes.total}'
+
+    - name: audit-names-the-post
+      description: |
+        The post-ref ValidatingAdmissionPolicy (config/milo/activity) names the
+        post in the audit events of vote and follow deletes, whose bodies
+        don't carry it. Milo's audit events reach the stand-in sink in
+        milo-system (config/overlays/e2e/audit-sink.yaml).
+      try:
+        - script:
+            shell: bash
+            timeout: 3m
+            content: |
+              . ../lib.sh
+              expect 200 "test-user unfollows" test-user DELETE "$(url test-user subscriptions/e2e-votes.test-user)"
+              audited() { # audited <resource> <name>: the post-ref annotation on its delete event
+                infra -n milo-system logs deployment/vector-audit-log-processor |
+                  jq -R -r --arg r "$1" --arg n "$2" 'fromjson? | .items[]? | select(.objectRef.resource == $r and .objectRef.name == $n and .verb == "delete")
+                    | .annotations["post-ref.feedback.miloapis.com/post"] // "none"' | tail -1
+              }
+              eventually 120 "the vote delete's audit event names the post" is e2e-votes audited votes e2e-votes.test-user
+              eventually 120 "the unfollow's audit event names the post" is e2e-votes audited subscriptions e2e-votes.test-user

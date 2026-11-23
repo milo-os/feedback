@@ -8,6 +8,23 @@ vars:
   CONTROLLER_TOOLS_VERSION: "v0.22.0"
   ENVTEST_VERSION: "release-0.25"
   ENVTEST_K8S_VERSION: "1.37.x"
+  CHAINSAW_VERSION: "v0.2.15"
+  # End-to-end tests run in a kind cluster from datum-cloud/test-infra, with
+  # Milo built from MILO_DIR (a checkout of milo-os/milo, by default a
+  # sibling of this one). Keep the test-infra ref in step with Milo's.
+  TEST_INFRA_CLUSTER_NAME: "test-infra"
+  TEST_INFRA_REPO_REF: "v0.5.0"
+  MILO_DIR: '{{.MILO_DIR | default (printf "%s/../milo" .ROOT_DIR)}}'
+  E2E_IMAGE_TAG: "e2e"
+  E2E_OVERLAY: "config/overlays/e2e"
+
+includes:
+  # Must set TASK_X_REMOTE_TASKFILES=1 to use this feature.
+  test-infra:
+    taskfile: https://raw.githubusercontent.com/datum-cloud/test-infra/{{.TEST_INFRA_REPO_REF}}/Taskfile.yml
+    checksum: 4995ce0e9bc4290b3a0175dee77af2570d715b435d5f3ff65f9cb6c491837bcb
+    vars:
+      REPO_REF: "{{.TEST_INFRA_REPO_REF}}"
 
 tasks:
   default:
@@ -90,3 +107,105 @@ tasks:
     cmds:
       - kustomize build config/base > /dev/null
       - kustomize build config/overlays/core-control-plane > /dev/null
+
+  # End-to-end tests. See "End-to-end tests" in README.md.
+  e2e:up:
+    desc: Create the kind cluster, deploy Milo from MILO_DIR and deploy feedback into it
+    cmds:
+      - task: e2e:cluster
+      - task: e2e:milo
+      - task: e2e:build
+      - task: e2e:deploy
+
+  e2e:cluster:
+    desc: Create the test-infra kind cluster, or reuse it
+    cmds:
+      - task: test-infra:ensure-repo
+      # cluster-up only writes the kubeconfig when it creates the cluster.
+      - |
+        if kind get clusters | grep -qx "{{.TEST_INFRA_CLUSTER_NAME}}"; then
+          kind get kubeconfig --name "{{.TEST_INFRA_CLUSTER_NAME}}" > .test-infra/kubeconfig
+        fi
+      - task: test-infra:cluster-up
+
+  e2e:milo:
+    desc: Build Milo from MILO_DIR, load it into the cluster and deploy it
+    cmds:
+      - |
+        set -e
+        MILO_DIR="{{.MILO_DIR}}"
+        if [ ! -f "$MILO_DIR/Taskfile.yaml" ]; then
+          echo "No Milo checkout at MILO_DIR=$MILO_DIR; set MILO_DIR to one" >&2
+          exit 1
+        fi
+        # Milo's tasks find the cluster through its own .test-infra.
+        [ -e "$MILO_DIR/.test-infra" ] || ln -s "{{.ROOT_DIR}}/.test-infra" "$MILO_DIR/.test-infra"
+        kind get kubeconfig --name "{{.TEST_INFRA_CLUSTER_NAME}}" > "$MILO_DIR/.test-infra/kubeconfig"
+        cd "$MILO_DIR"
+        echo "Deploying Milo from $MILO_DIR at $(git rev-parse --short HEAD)"
+        TASK_X_REMOTE_TASKFILES=1 task dev:build dev:load dev:deploy
+        # dev:deploy doesn't restart Milo when only the image changed.
+        task test-infra:kubectl -- -n milo-system rollout restart deployment/milo-apiserver deployment/milo-controller-manager
+        task test-infra:kubectl -- -n milo-system rollout status deployment/milo-apiserver deployment/milo-controller-manager --timeout=300s
+      - task: e2e:milo-identities
+
+  e2e:milo-identities:
+    desc: Add feedback's service identities and test users to Milo's static tokens
+    cmds:
+      - hack/e2e/milo-identities.sh
+
+  e2e:build:
+    desc: Build the feedback image and load it into the cluster
+    cmds:
+      - task: docker-build
+        vars:
+          IMAGE_TAG: "{{.E2E_IMAGE_TAG}}"
+      - kind load docker-image "{{.IMAGE_NAME}}:{{.E2E_IMAGE_TAG}}" --name "{{.TEST_INFRA_CLUSTER_NAME}}"
+
+  e2e:deploy:
+    desc: Install feedback in Milo and run the operator, uploads and MinIO in the cluster
+    cmds:
+      - hack/e2e/deploy.sh
+    env:
+      OVERLAY: "{{.E2E_OVERLAY}}"
+      IMAGE: "{{.IMAGE_NAME}}:{{.E2E_IMAGE_TAG}}"
+
+  e2e:redeploy:
+    desc: Rebuild the feedback image and restart the operator and uploads
+    cmds:
+      - task: e2e:build
+      - task: e2e:deploy
+      - task test-infra:kubectl -- -n feedback-system rollout restart deployment/feedback-operator deployment/feedback-uploads
+      - task test-infra:kubectl -- -n feedback-system rollout status deployment/feedback-operator deployment/feedback-uploads --timeout=180s
+
+  e2e:test:
+    desc: Run the chainsaw end-to-end tests (pass test directories after --)
+    deps:
+      - install-chainsaw
+    cmds:
+      - |
+        set -e
+        if ! curl -skf -o /dev/null -H "Authorization: Bearer test-admin-token" https://localhost:30443/readyz; then
+          echo "Milo isn't answering on https://localhost:30443; run task e2e:up first" >&2
+          exit 1
+        fi
+        KUBECONFIG="{{.ROOT_DIR}}/test/e2e/kubeconfig-milo" \
+        INFRA_KUBECONFIG="{{.ROOT_DIR}}/.test-infra/kubeconfig" \
+          "{{.TOOL_DIR}}/chainsaw" test --config test/e2e/.chainsaw.yaml \
+          --cluster infra="{{.ROOT_DIR}}/.test-infra/kubeconfig" \
+          {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}test/e2e/{{end}}
+
+  e2e:down:
+    desc: Delete the kind cluster (only when run explicitly)
+    cmds:
+      - task: test-infra:cluster-down
+
+  install-chainsaw:
+    desc: Install chainsaw into bin/
+    status:
+      - test -x {{.TOOL_DIR}}/chainsaw-{{.CHAINSAW_VERSION}}
+    cmds:
+      - mkdir -p {{.TOOL_DIR}}
+      - GOBIN={{.TOOL_DIR}} go install github.com/kyverno/chainsaw@{{.CHAINSAW_VERSION}}
+      - mv {{.TOOL_DIR}}/chainsaw {{.TOOL_DIR}}/chainsaw-{{.CHAINSAW_VERSION}}
+      - ln -sf {{.TOOL_DIR}}/chainsaw-{{.CHAINSAW_VERSION}} {{.TOOL_DIR}}/chainsaw

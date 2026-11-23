@@ -1,0 +1,15 @@
+# Search index policies for Milo's search service, for keyword search and
+# similar posts while someone writes feedback. Everything here is written at
+# Milo's platform root and is public to every signed-in user, so each policy
+# sets visibility: AllContexts and a query in any context can find it (see
+# "Who can search posts" in README.md). The indexer reads objects from the
+# audit log, so these need Milo to log feedback writes at RequestResponse.
+# Submissions, reviews, security reports, votes and follows are never
+# indexed.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - posts.yaml
+  - releases.yaml
+  - changelogentries.yaml
