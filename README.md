@@ -127,22 +127,24 @@ The search service filters every `ResourceSearchQuery` by the caller's Milo cont
 
 feedback-sync and the operator write posts, releases and changelog entries at the platform root, and every policy in `config/milo/search` sets `visibility: AllContexts`, so a query in any context can find them. That's safe because everything in these indexes may be read by any signed-in user: hidden posts are left out by the posts policy's condition, and nothing private is indexed. `test/config` checks every policy sets it.
 
-**Today search only serves `ResourceSearchQuery` at the platform root.** Its `DiscoveryContextPolicy` lists only the `Platform` context, so a user, organization or project control plane has no search API, whatever the visibility. Until search is served in those contexts, similar posts and keyword search run on a server, at the platform root:
+**Search serves `ResourceSearchQuery` at the platform root and in each user's own context** (milo-os/search#175). Organization and project control planes have no search API. In their own context a user finds visible posts, releases and changelog entries, and otherwise only their own documents; Milo accepts a user's control plane only from a caller with permission on that user, so no one can query another user's context.
 
 | Caller | How it searches posts |
 | --- | --- |
-| datum.net | its server's service account, at the platform root |
+| datum.net | its server's service account, at the platform root, so anonymous visitors never call Milo |
 | feedback-operator (submission triage) | its own identity, at the platform root |
-| cloud portal | its server, with a platform service account like the one behind its post cache; not with the user's token in the user context |
-| `datumctl`, Patch | can't query with the user's credentials; they need a server-side call (a feedback endpoint or `feedback-mcp`), not built yet |
+| cloud portal | the user's token, in the user's context |
+| `datumctl`, Patch | the user's credentials, in the user's context |
 
-The caller needs `search.miloapis.com/resourcesearchqueries.create` at the platform root (search's `search.miloapis.com-searcher` role). That isn't limited to feedback: search doesn't check access per object or per kind, and a platform-root query with no `targetResources` searches every index across every tenant. So:
+In their own context a user needs `search.miloapis.com/resourcesearchqueries.create` on their User (search's `search.miloapis.com-searcher` role). On staging every user gets it through `iam-user-self-manage` (datum-cloud/infra#9715); production doesn't grant it yet.
 
-- Never grant it to end users.
+A server searching at the platform root needs the same permission there. That isn't limited to feedback: search doesn't check access per object or per kind, and a platform-root query with no `targetResources` searches every index across every tenant. So:
+
+- Never grant it to end users at the platform root.
 - Always set `targetResources` to the feedback kinds, and never pass through targets or tenant filters a client supplies.
 - Don't filter on the result's tenant. Milo marks root requests as scope `global`, so posts indexed from the audit log carry tenant type `Global` while a reindex stores `platform`.
 
-Nothing in `config/milo` grants this yet. `hack/search-scope.sh` checks the behavior above against a real environment.
+Nothing in `config/milo` grants it at the platform root yet. `hack/search-scope.sh` checks the behavior above against a real environment.
 
 ## Roles
 

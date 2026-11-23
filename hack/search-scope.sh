@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # Checks which Milo contexts can find a post in search, as README.md's "Who
-# can search posts" describes: a query at the platform root finds a visible,
-# indexed post, and a user's own context has no search API yet. Once search
-# serves ResourceSearchQuery there, the user context finds the post too
-# (visibility: AllContexts), and this reports README.md as out of date.
+# can search posts" describes: a query at the platform root and a query in a
+# user's own context both find a visible, indexed post.
 #
 #   PLATFORM_KUBECONFIG=<milo platform-root kubeconfig> \
 #   USER_KUBECONFIG=<kubeconfig for a user's control plane> \
@@ -11,12 +9,12 @@
 #
 # USER_KUBECONFIG's server must end in
 # /apis/iam.miloapis.com/v1alpha1/users/<id>/control-plane, which is how
-# datumctl and the cloud portal reach the user context. Run it against
-# staging. It only reads posts and creates ResourceSearchQueries, which
-# aren't stored.
+# datumctl and the cloud portal reach the user context, and its user needs the
+# searcher permission there. Run it against staging. It only reads posts and
+# creates ResourceSearchQueries, which aren't stored.
 #
-# Exits 0 when search behaves as documented, 1 when it doesn't (so the
-# README is out of date), and 2 when a query fails.
+# Exits 0 when search behaves as documented, 1 when it doesn't, and 2 when a
+# discovery request or query fails.
 #
 # Needs: kubectl, jq.
 set -euo pipefail
@@ -35,9 +33,21 @@ title=$(jq -r '.status.title // ""' <<<"$obj")
 [[ -n $title ]] || { echo "post $post has no title" >&2; exit 2; }
 [[ $(jq '.spec.hidden == true' <<<"$obj") == false ]] || { echo "post $post is hidden; pick a visible post" >&2; exit 2; }
 
-# served <kubeconfig> reports whether that context serves ResourceSearchQuery.
+# served <kubeconfig> returns 0 when that context serves ResourceSearchQuery,
+# 1 when discovery succeeds without it, and 2 when discovery fails. kubectl
+# exits non-zero when any API group fails discovery, so a listed
+# resourcesearchqueries still counts as served.
 served() {
-	KUBECONFIG=$1 kubectl api-resources --api-group=search.miloapis.com -o name 2>/dev/null | grep -qx 'resourcesearchqueries.search.miloapis.com'
+	local out rc=0
+	out=$(KUBECONFIG=$1 kubectl api-resources --api-group=search.miloapis.com -o name 2>&1) || rc=$?
+	if grep -qx 'resourcesearchqueries.search.miloapis.com' <<<"$out"; then
+		return 0
+	fi
+	if ((rc)); then
+		printf 'discovery failed:\n%s\n' "$out" >&2
+		return 2
+	fi
+	return 1
 }
 
 # search <kubeconfig> prints the names of the posts the query returns.
@@ -65,15 +75,23 @@ else
 	echo "platform root: doesn't find $post; is it indexed?"
 	ok=0
 fi
-if ! served "$USER_KUBECONFIG"; then
-	echo "user context: no search API"
-else
+
+rc=0
+served "$USER_KUBECONFIG" || rc=$?
+case $rc in
+0)
 	user=$(search "$USER_KUBECONFIG") || exit 2
 	if grep -qxF "$post" <<<"$user"; then
-		echo "user context: search is served and finds $post; README.md's \"Who can search posts\" is out of date"
+		echo "user context: finds $post"
 	else
-		echo "user context: search is served but doesn't find $post; check the policies' visibility"
+		echo "user context: doesn't find $post; check the policies' visibility"
+		ok=0
 	fi
+	;;
+1)
+	echo "user context: no search API; is milo-os/search#175 deployed?"
 	ok=0
-fi
+	;;
+*) exit 2 ;;
+esac
 ((ok)) || exit 1
