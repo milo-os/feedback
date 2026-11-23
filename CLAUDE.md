@@ -33,9 +33,16 @@ datum-cloud/enhancements#943.
   Never apply two of them with the same manager: an apply drops fields its
   manager applied before and left out. Staff can only patch
   `spec.hidden` on posts.
-- `Submission`, `SubmissionReview`, `SecurityReport` and
-  `SecurityReportTriage` are audited at `Metadata` only (a Milo audit policy
-  rule). Security reports are never indexed, synced or sent to the AI gateway.
+- `Submission`, `SubmissionReview`, `SecurityReport`, `SecurityReportTriage`
+  and `FeedbackDigest` are audited at `Metadata` only (a rule in Milo's audit
+  policy in datum-cloud/infra), so their activity rules can't read request or
+  response bodies. Security reports are never indexed, synced or sent to the
+  AI gateway, and have no ActivityPolicy: platform-timeline readers see every
+  activity entry, whoever made it.
+- A delete's audit event has a `Status` response, never the object. Activity
+  rules for deletes use `objectRef` or an audit annotation (see
+  `config/milo/activity/post-ref.yaml`); the activity service's CEL has no
+  string functions, so names can't be split.
 - Someone may report a vulnerability through the general form. Triage runs a
   check inside the operator first; a submission it flags
   (`status.triage.likelySecurityIssue`) is never sent to the AI gateway or any

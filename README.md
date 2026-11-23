@@ -102,6 +102,12 @@ GET  /{submissions|securityreports}/{name}/attachments/{ref}             (staff)
   - A `Fixed` or `Disclosed` report with public credit gets a `SecurityAcknowledgement` with the name, link, month and severity. It's deleted if that stops being true.
 - **`move-to-security` reconciler:** carries out `MoveToSecurity` review decisions. It creates a report owned by the submitter, named `<submission>-<submission UID>` and annotated with the submission's name and UID (`feedback.miloapis.com/moved-from-submission`, `-uid`). It reads the report back and checks the name, UID and owner before it copies the attachments and deletes the submission, which takes its review and files with it. If a report it didn't create already has that name, it keeps the submission and its files and sets `Applied=False` with reason `ReportNameTaken` on the review; the move is tried again when a report is deleted. Only the operator can set the moved-from annotations, and they can't change.
 
+## Audit and activity
+
+Milo audits feedback writes like any other CRD. Its audit policy (in `datum-cloud/infra`) logs feedback writes at `RequestResponse`, so search can index posts from the audit log. It logs `submissions`, `submissionreviews`, `securityreports`, `securityreporttriages` and `feedbackdigests`, with their subresources, at `Metadata` only: private context and vulnerability details never reach the audit log, activity or search.
+
+`config/milo/activity` holds an `ActivityPolicy` per kind, so people's actions read as sentences in activity timelines: voting, following, sending feedback, staff decisions, hiding posts and editing sources. The service's own components are `system:` users and are left out. A delete's audit event carries a `Status`, not the deleted object, so a `ValidatingAdmissionPolicy` (`post-ref.yaml`) adds the post's name to vote and subscription deletes as the audit annotation `post-ref.feedback.miloapis.com/post`, and the unvote and unfollow rules read it there. Security reports and their triage have no `ActivityPolicy`: the activity service shows every entry to anyone who can read the platform timeline, with no per-entry access check, so an entry would reveal that a report exists. `test/config` compiles every rule in the activity service's CEL environment, checks that rules never read bodies a metadata-only kind or a delete won't have, renders delete events written by an envtest API server, and checks no policy covers security reports.
+
 ## Roles
 
 | Role | For |
@@ -132,8 +138,9 @@ config/crd/               generated CRDs, installed in Milo
 config/base/              operator and uploads Deployments, Services, leader election RBAC
 config/components/        milo-integration: Milo kubeconfig, client and webhook certificates
 config/milo/              applied to Milo: IAM (iam/), RBAC for the service's
-                          components (rbac/), webhook config (webhook/), and
-                          optional role bindings (bindings/)
+                          components (rbac/), webhook config (webhook/),
+                          activity rules (activity/), and optional role
+                          bindings (bindings/)
 config/samples/           an example of every resource
 test/config/              checks config/ against the CRDs
 ```

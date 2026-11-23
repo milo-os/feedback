@@ -1,0 +1,21 @@
+# Posts are logged in full. feedback-sync and the operator are system:
+# actors, so only staff hiding and showing posts appears. A merge patch that
+# sets spec.hidden reads as hiding or showing; other staff edits as updates.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: feedback.miloapis.com-posts
+spec:
+  resource:
+    apiGroup: feedback.miloapis.com
+    kind: Post
+  auditRules:
+    - name: hide
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && type(audit.requestObject) == map && has(audit.requestObject.spec) && type(audit.requestObject.spec) == map && has(audit.requestObject.spec.hidden) && audit.requestObject.spec.hidden == true && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} hid post {{ link(audit.objectRef.name, audit.objectRef) }}"
+    - name: show
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && type(audit.requestObject) == map && has(audit.requestObject.spec) && type(audit.requestObject.spec) == map && has(audit.requestObject.spec.hidden) && audit.requestObject.spec.hidden == false && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} showed post {{ link(audit.objectRef.name, audit.objectRef) }} again"
+    - name: update
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated post {{ link(audit.objectRef.name, audit.objectRef) }}"

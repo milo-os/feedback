@@ -1,0 +1,17 @@
+# Submissions are logged at Metadata only, so rules use the verb and the
+# object reference and never the request or response body.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: feedback.miloapis.com-submissions
+spec:
+  resource:
+    apiGroup: feedback.miloapis.com
+    kind: Submission
+  auditRules:
+    - name: send
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} sent feedback"
+    - name: delete
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted submission {{ audit.objectRef.name }}"
