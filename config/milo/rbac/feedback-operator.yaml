@@ -1,7 +1,7 @@
 # feedback-operator reconciles every feedback resource: it watches them all,
 # writes post votes and delivery, follows and votes it creates for users,
-# review outcomes, reports moved from submissions, acknowledgements and
-# digests. It never writes a post's GitHub fields or a user's spec.
+# review outcomes, reports moved from submissions, empty triage objects for
+# new reports, acknowledgements and digests. It never writes a post's GitHub fields or a user's spec.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -17,10 +17,10 @@ rules:
     resources: [posts/status, votes/status, submissions/status, submissionreviews/status, securityreports/status]
     verbs: [get, update, patch]
   - apiGroups: [feedback.miloapis.com]
-    resources: [votes, subscriptions, submissionreviews, securityreports, securityacknowledgements, feedbackdigests]
+    resources: [votes, subscriptions, submissionreviews, securityreports, securityreporttriages, securityacknowledgements, feedbackdigests]
     verbs: [create, update, patch, delete]
   # delete for reports moved to the security track; update and patch only to
-  # add and remove the attachments finalizer.
+  # add and remove the attachments and move finalizers.
   - apiGroups: [feedback.miloapis.com]
     resources: [submissions]
     verbs: [update, patch, delete]

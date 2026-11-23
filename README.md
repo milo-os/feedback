@@ -17,8 +17,9 @@ webhooks.
 ## Status
 
 The CRDs are defined. The operator sets owners and reviewers in admission,
-reconciles votes, follows and submission reviews, and stores attachments.
-Triage, security reports and digests are tracked as sub-issues of the epic.
+reconciles votes, follows, submission reviews and security reports, and
+stores attachments. Triage, notifications and digests, audit and search
+config are tracked as sub-issues of the epic.
 
 | Resource | Who writes it | Who reads it |
 | --- | --- | --- |
@@ -87,6 +88,19 @@ GET  /{submissions|securityreports}/{name}/attachments/{ref}             (staff)
 - **Keeping and deleting.** The operator copies attached files under `submissions/<name>/` as soon as the submission exists, and adds the `feedback.miloapis.com/attachments` finalizer. Deleting the submission deletes its files.
 - **Lifecycle rule.** The bucket's lifecycle rule should delete `uploads/` after a day.
 - **Configuration.** Set the bucket in the `feedback-config` ConfigMap (`attachments-bucket`). The operator and the upload service share it.
+
+## Security reports
+
+- **Admission** (`securityreport` webhook):
+  - Credit links must be http(s), and public credit needs a name.
+  - Reports with no owner (logged by the Security Team for someone without an account) need the reporter's email or GitHub username.
+  - Status updates can add timeline entries but not change or remove them. A phase change needs an entry for the new phase; the `securitytimeline` webhook adds it if the update didn't. `NotApplicable` and `Duplicate` need a reason, credit rewards need an amount, and advisories need an https link.
+- **`security-report` reconciler:**
+  - A new report starts in `Received` with its first timeline entry.
+  - It creates the report's `SecurityReportTriage` for the Security Team's private notes.
+  - It copies attachments under `security-reports/<name>/` and deletes them with the report.
+  - A `Fixed` or `Disclosed` report with public credit gets a `SecurityAcknowledgement` with the name, link, month and severity. It's deleted if that stops being true.
+- **`move-to-security` reconciler:** carries out `MoveToSecurity` review decisions. It creates a report owned by the submitter, named `<submission>-<submission UID>` and annotated with the submission's name and UID (`feedback.miloapis.com/moved-from-submission`, `-uid`). It reads the report back and checks the name, UID and owner before it copies the attachments and deletes the submission, which takes its review and files with it. If a report it didn't create already has that name, it keeps the submission and its files and sets `Applied=False` with reason `ReportNameTaken` on the review; the move is tried again when a report is deleted. Only the operator can set the moved-from annotations, and they can't change.
 
 ## Roles
 

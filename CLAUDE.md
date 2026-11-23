@@ -36,6 +36,12 @@ datum-cloud/enhancements#943.
 - `Submission`, `SubmissionReview`, `SecurityReport` and
   `SecurityReportTriage` are audited at `Metadata` only (a Milo audit policy
   rule). Security reports are never indexed, synced or sent to the AI gateway.
+- Someone may report a vulnerability through the general form. Triage runs a
+  check inside the operator first; a submission it flags
+  (`status.triage.likelySecurityIssue`) is never sent to the AI gateway or any
+  other outside service, and staff move it to the security track. Text typed
+  into the general form, including similar-posts search queries, is audited at
+  `Metadata` only.
 
 ## Commands
 

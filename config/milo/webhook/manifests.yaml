@@ -67,12 +67,52 @@ webhooks:
     resources:
     - submissionreviews
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: feedback-operator-webhook
+      namespace: feedback-system
+      path: /mutate-securityreport-status
+  failurePolicy: Fail
+  name: securitytimeline.feedback.miloapis.com
+  rules:
+  - apiGroups:
+    - feedback.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - UPDATE
+    resources:
+    - securityreports/status
+  sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: validating-webhook-configuration
 webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: feedback-operator-webhook
+      namespace: feedback-system
+      path: /validate-securityreport
+  failurePolicy: Fail
+  name: securityreport.feedback.miloapis.com
+  rules:
+  - apiGroups:
+    - feedback.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - securityreports
+    - securityreports/status
+  sideEffects: None
 - admissionReviewVersions:
   - v1
   clientConfig:
