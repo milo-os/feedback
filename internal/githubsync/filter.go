@@ -38,19 +38,23 @@ func Match(src *v1.GitHubSource, is *github.Issue) (bool, string) {
 
 // repositorySelected applies the include and exclude globs. No include
 // patterns selects every repository. Names compare case-insensitively, as on
-// GitHub.
+// GitHub. A malformed pattern never lets a repository in: as an include it
+// selects nothing, and as an exclude it excludes everything.
 func repositorySelected(sel v1.RepositorySelector, repo string) bool {
 	repo = strings.ToLower(repo)
-	matches := func(patterns []string) bool {
+	matches := func(patterns []string, malformed bool) bool {
 		return slices.ContainsFunc(patterns, func(p string) bool {
 			ok, err := path.Match(strings.ToLower(p), repo)
-			return err == nil && ok
+			if err != nil {
+				return malformed
+			}
+			return ok
 		})
 	}
-	if len(sel.Include) > 0 && !matches(sel.Include) {
+	if len(sel.Include) > 0 && !matches(sel.Include, false) {
 		return false
 	}
-	return !matches(sel.Exclude)
+	return !matches(sel.Exclude, true)
 }
 
 func containsFold(list []string, s string) bool {

@@ -1,8 +1,14 @@
 package githubsync
 
 import (
+	"os"
+	"path"
+	"regexp"
 	"slices"
 	"testing"
+
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"sigs.k8s.io/yaml"
 
 	"go.miloapis.com/feedback/internal/github"
 	v1 "go.miloapis.com/feedback/pkg/apis/feedback/v1alpha1"
@@ -50,6 +56,14 @@ func TestMatch(t *testing.T) {
 		{
 			name:   "exclude glob",
 			source: func(s *v1.GitHubSource) { s.Repositories.Exclude = []string{"*ments"} },
+		},
+		{
+			name:   "a malformed exclude pattern excludes everything",
+			source: func(s *v1.GitHubSource) { s.Repositories.Exclude = []string{"infra-[a-z"} },
+		},
+		{
+			name:   "a malformed include pattern selects nothing",
+			source: func(s *v1.GitHubSource) { s.Repositories.Include = []string{"[enhancements"} },
 		},
 		{
 			name:   "no include patterns selects every repository",
@@ -104,5 +118,47 @@ func TestSearchQueries(t *testing.T) {
 	src.Issues.Labels = nil
 	if got := SearchQueries(&src); len(got) != 0 {
 		t.Errorf("no issue types or labels: got %q, want none", got)
+	}
+}
+
+// TestRepositoryPatternsAreWellFormed checks that every glob the CRD accepts
+// is one path.Match can use, over every short string of glob characters.
+func TestRepositoryPatternsAreWellFormed(t *testing.T) {
+	raw, err := os.ReadFile("../../config/crd/bases/feedback.miloapis.com_feedbacksources.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var crd apiextensionsv1.CustomResourceDefinition
+	if err := yaml.Unmarshal(raw, &crd); err != nil {
+		t.Fatal(err)
+	}
+	repos := crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"].Properties["github"].Properties["repositories"]
+	for _, field := range []string{"include", "exclude"} {
+		pattern := repos.Properties[field].Items.Schema.Pattern
+		if pattern == "" {
+			t.Fatalf("repositories.%s has no pattern", field)
+		}
+		re := regexp.MustCompile(pattern)
+		for _, bad := range []string{"infra-[a-z", "[]", "[-a]", "[a-]", "a]", `a\b`, "[^a]"} {
+			if re.MatchString(bad) {
+				t.Errorf("repositories.%s accepts %q", field, bad)
+			}
+		}
+		const alphabet = "az-[]*?."
+		var walk func(prefix string)
+		walk = func(prefix string) {
+			if prefix != "" && re.MatchString(prefix) {
+				if _, err := path.Match(prefix, "x"); err != nil {
+					t.Errorf("repositories.%s accepts %q, which path.Match can't use: %v", field, prefix, err)
+				}
+			}
+			if len(prefix) == 6 {
+				return
+			}
+			for _, c := range alphabet {
+				walk(prefix + string(c))
+			}
+		}
+		walk("")
 	}
 }

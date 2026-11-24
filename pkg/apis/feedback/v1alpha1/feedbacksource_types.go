@@ -78,11 +78,11 @@ type GitHubSource struct {
 type RepositorySelector struct {
 	// +optional
 	// +listType=set
-	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9._*?\[\]-]+$`
+	// +kubebuilder:validation:items:Pattern=`^([A-Za-z0-9._*?-]|\[([A-Za-z0-9._](-[A-Za-z0-9._])?)+\])+$`
 	Include []string `json:"include,omitempty"`
 	// +optional
 	// +listType=set
-	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9._*?\[\]-]+$`
+	// +kubebuilder:validation:items:Pattern=`^([A-Za-z0-9._*?-]|\[([A-Za-z0-9._](-[A-Za-z0-9._])?)+\])+$`
 	Exclude []string `json:"exclude,omitempty"`
 }
 
