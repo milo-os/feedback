@@ -28,7 +28,7 @@ spec:
     "Backlog": backlog
     "Planning": planning
     "On Deck": on-deck
-    "In Progress": in-progress
+    "In progress": in-progress
     "Done": shipped
   categoryMapping:
     "Build": build
