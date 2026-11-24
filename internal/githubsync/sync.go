@@ -149,14 +149,22 @@ func (s *Syncer) SyncIssue(ctx context.Context, src *v1.FeedbackSource, repo str
 // sync has an empty result; the rest are still synced, and the errors are
 // returned joined.
 func (s *Syncer) Sync(ctx context.Context, src *v1.FeedbackSource, issues []*github.Issue) ([]Result, error) {
-	if err := s.readProjectItems(ctx, src, issues); err != nil {
+	refused, err := s.readProjectItems(ctx, src, issues)
+	if refused == nil {
 		return nil, err
 	}
 	results := make([]Result, len(issues))
 	var errs []error
+	if err != nil {
+		errs = append(errs, err)
+	}
 	for i, is := range issues {
 		if err := ctx.Err(); err != nil {
 			return results, errors.Join(append(errs, err)...)
+		}
+		if refused[is.ID] {
+			// Without its project items, the issue's status is unknown.
+			continue
 		}
 		res, err := s.syncOne(ctx, src, is)
 		if err != nil {
@@ -170,24 +178,36 @@ func (s *Syncer) Sync(ctx context.Context, src *v1.FeedbackSource, issues []*git
 
 // readProjectItems reads project items from the project owner's
 // installation when the project belongs to another org: an installation
-// only sees its own org's projects.
-func (s *Syncer) readProjectItems(ctx context.Context, src *v1.FeedbackSource, issues []*github.Issue) error {
+// only sees its own org's projects. It returns the IDs of issues whose items
+// GitHub refused, which mustn't be synced as if they weren't on the project,
+// or nil if it couldn't read any.
+func (s *Syncer) readProjectItems(ctx context.Context, src *v1.FeedbackSource, issues []*github.Issue) (map[string]bool, error) {
+	refused := map[string]bool{}
 	p := src.Spec.GitHub.Project
 	if p == nil || strings.EqualFold(p.Owner, src.Spec.GitHub.Org) || len(issues) == 0 {
-		return nil
+		return refused, nil
 	}
 	ids := make([]string, 0, len(issues))
 	for _, is := range issues {
 		ids = append(ids, is.ID)
 	}
 	items, err := s.GitHub.ProjectItems(ctx, p.Owner, ids, p.StatusField)
-	if err != nil {
-		return fmt.Errorf("reading the %s project: %w", p.Owner, err)
+	if inc, ok := errors.AsType[*github.IncompleteError](err); ok {
+		for _, id := range inc.IDs {
+			refused[id] = true
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("reading the %s project: %w", p.Owner, err)
 	}
 	for _, is := range issues {
-		is.ProjectItems = items[is.ID]
+		if !refused[is.ID] {
+			is.ProjectItems = items[is.ID]
+		}
 	}
-	return nil
+	if err != nil {
+		return refused, fmt.Errorf("reading the %s project: %w", p.Owner, err)
+	}
+	return refused, nil
 }
 
 func (s *Syncer) syncOne(ctx context.Context, src *v1.FeedbackSource, is *github.Issue) (Result, error) {
