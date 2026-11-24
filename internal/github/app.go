@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // DefaultBaseURL is GitHub's REST and GraphQL API.
@@ -37,6 +39,9 @@ type App struct {
 	baseURL string
 	http    *http.Client
 	now     func() time.Time
+
+	// minting makes concurrent callers share one token exchange.
+	minting singleflight.Group
 
 	mu      sync.Mutex
 	tokens  map[int64]installationToken
@@ -137,14 +142,37 @@ func (a *App) jwt() (string, error) {
 }
 
 // Token returns a token for the installation, cached until shortly before it
-// expires.
+// expires. Concurrent callers needing a new token share one exchange.
 func (a *App) Token(ctx context.Context, installationID int64) (string, error) {
-	a.mu.Lock()
-	t, ok := a.tokens[installationID]
-	a.mu.Unlock()
-	if ok && a.now().Before(t.expiresAt.Add(-tokenSlack)) {
-		return t.token, nil
+	if t, ok := a.cachedToken(installationID); ok {
+		return t, nil
 	}
+	t, err, _ := a.minting.Do(strconv.FormatInt(installationID, 10), func() (any, error) {
+		// A flight that just finished may have stored one.
+		if t, ok := a.cachedToken(installationID); ok {
+			return t, nil
+		}
+		// The exchange is shared, so one caller giving up mustn't fail the
+		// others; the HTTP client's timeout still bounds it.
+		return a.mintToken(context.WithoutCancel(ctx), installationID)
+	})
+	if err != nil {
+		return "", err
+	}
+	return t.(string), nil
+}
+
+func (a *App) cachedToken(installationID int64) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	t, ok := a.tokens[installationID]
+	if ok && a.now().Before(t.expiresAt.Add(-tokenSlack)) {
+		return t.token, true
+	}
+	return "", false
+}
+
+func (a *App) mintToken(ctx context.Context, installationID int64) (string, error) {
 	var out struct {
 		Token     string    `json:"token"`
 		ExpiresAt time.Time `json:"expires_at"`
@@ -201,8 +229,12 @@ func (a *App) appRequest(ctx context.Context, method, path string, out any) erro
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, strings.TrimSpace(string(msg)))
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		msg := strings.TrimSpace(string(raw))
+		if rl := a.rateLimited(resp.Header, resp.StatusCode, msg); rl != nil {
+			return rl
+		}
+		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, msg)
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
 }

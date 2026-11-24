@@ -23,8 +23,10 @@ const (
 	summaryHardCut = 40
 )
 
-// imageSrc are the image URLs GitHub puts in rendered bodies.
-var imageSrc = regexp.MustCompile(`^https://(camo\.githubusercontent\.com|user-images\.githubusercontent\.com|avatars\.githubusercontent\.com|raw\.githubusercontent\.com|github\.com)/`)
+// imageSrc are the image URLs GitHub puts in rendered bodies. On github.com
+// itself only uploaded attachments are allowed, so a body can't make
+// readers' browsers request other github.com pages.
+var imageSrc = regexp.MustCompile(`^https://((camo|user-images|avatars|raw)\.githubusercontent\.com|github\.com/user-attachments/assets)/`)
 
 // privateUserImage is how GitHub renders an uploaded attachment: a signed
 // URL that expires five minutes after the body is fetched, and differs on

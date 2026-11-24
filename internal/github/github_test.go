@@ -12,14 +12,19 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 )
 
 var (
@@ -492,4 +497,147 @@ func slicesContains(s []any, v any) bool {
 		}
 	}
 	return false
+}
+
+// TestRefusedIssuesAreReported: an error on an issue's projectItems nulls the
+// whole issue. Search and ProjectItems return the rest with an
+// IncompleteError rather than treating it as an issue that isn't there.
+func TestRefusedIssuesAreReported(t *testing.T) {
+	f, app := newFake(t)
+	created := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)
+	refusal := map[string]any{"type": "FORBIDDEN", "message": "Resource not accessible by integration"}
+	at := func(path ...any) map[string]any {
+		e := maps.Clone(refusal)
+		e["path"] = path
+		return e
+	}
+	f.graphql = func(w http.ResponseWriter, q string, vars map[string]any) {
+		if strings.Contains(q, "search(") {
+			respond(w, map[string]any{"data": map[string]any{"search": map[string]any{
+				"issueCount": 4, "pageInfo": map[string]any{"hasNextPage": false},
+				// Refused, then one the installation can't see.
+				"nodes": []any{issueJSON(1, created), nil, nil, issueJSON(4, created)},
+			}}, "errors": []any{at("search", "nodes", 1, "projectItems")}})
+			return
+		}
+		ids := vars["ids"].([]any)
+		respond(w, map[string]any{"data": map[string]any{"nodes": []any{
+			map[string]any{"id": ids[0], "projectItems": map[string]any{"nodes": []any{}}}, nil,
+		}}, "errors": []any{at("nodes", 1, "projectItems")}})
+	}
+	ctx := context.Background()
+	found, err := app.Client(7).SearchIssues(ctx, "org:datum-cloud", "", time.Now())
+	inc, ok := errors.AsType[*IncompleteError](err)
+	if !ok || inc.Missing != 1 || len(found) != 2 {
+		t.Errorf("SearchIssues() = %d issues, %v; want 2 and an IncompleteError for one", len(found), err)
+	}
+	items, err := app.Client(7).ProjectItems(ctx, []string{"I_1", "I_2"}, "")
+	inc, ok = errors.AsType[*IncompleteError](err)
+	if !ok || !slices.Equal(inc.IDs, []string{"I_2"}) {
+		t.Errorf("ProjectItems() error = %v, want an IncompleteError naming I_2", err)
+	}
+	if _, ok := items["I_1"]; !ok || len(items) != 1 {
+		t.Errorf("ProjectItems() = %v, want I_1 only", items)
+	}
+}
+
+func TestRateLimitErrors(t *testing.T) {
+	f, app := newFake(t)
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	app.now = func() time.Time { return now }
+	tests := []struct {
+		name    string
+		respond func(w http.ResponseWriter)
+		want    time.Time // zero: not a rate limit
+	}{
+		{
+			name: "secondary limit with Retry-After",
+			respond: func(w http.ResponseWriter) {
+				w.Header().Set("Retry-After", "30")
+				w.WriteHeader(http.StatusForbidden)
+				respond(w, map[string]any{"message": "You have exceeded a secondary rate limit."})
+			},
+			want: now.Add(30 * time.Second),
+		},
+		{
+			name:    "429 without headers",
+			respond: func(w http.ResponseWriter) { w.WriteHeader(http.StatusTooManyRequests) },
+			want:    now.Add(secondaryRateLimitWait),
+		},
+		{
+			name: "hourly limit used up",
+			respond: func(w http.ResponseWriter) {
+				w.Header().Set("X-RateLimit-Remaining", "0")
+				w.WriteHeader(http.StatusForbidden)
+			},
+			want: time.Unix(1800000000, 0).UTC(),
+		},
+		{
+			name: "GraphQL RATE_LIMITED",
+			respond: func(w http.ResponseWriter) {
+				w.Header().Set("X-RateLimit-Remaining", "0")
+				respond(w, map[string]any{"data": nil, "errors": []any{map[string]any{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}}})
+			},
+			want: time.Unix(1800000000, 0).UTC(),
+		},
+		{
+			name: "a 403 that isn't a rate limit",
+			respond: func(w http.ResponseWriter) {
+				w.WriteHeader(http.StatusForbidden)
+				respond(w, map[string]any{"message": "Resource not accessible by integration"})
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f.graphql = func(w http.ResponseWriter, _ string, _ map[string]any) { tt.respond(w) }
+			_, err := app.Client(7).Issue(context.Background(), "datum-cloud", "enhancements", 1, "")
+			rl, ok := errors.AsType[*RateLimitError](err)
+			switch {
+			case tt.want.IsZero() && (ok || err == nil):
+				t.Errorf("Issue() error = %v, want an error that isn't a rate limit", err)
+			case !tt.want.IsZero() && (!ok || !rl.RetryAt.Equal(tt.want)):
+				t.Errorf("Issue() error = %v, want a RateLimitError retrying at %s", err, tt.want)
+			}
+		})
+	}
+}
+
+// TestConcurrentCallersShareATokenExchange: callers that all need a new
+// token wait for one exchange.
+func TestConcurrentCallersShareATokenExchange(t *testing.T) {
+	f, app := newFake(t)
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Go(func() {
+			if _, err := app.Token(context.Background(), 7); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if f.exchanges != 1 {
+		t.Errorf("exchanges = %d, want 1", f.exchanges)
+	}
+}
+
+// TestTruncatedListsAreLogged: an issue with more labels or project items
+// than one read returns is logged.
+func TestTruncatedListsAreLogged(t *testing.T) {
+	f, app := newFake(t)
+	f.graphql = func(w http.ResponseWriter, _ string, _ map[string]any) {
+		is := issueJSON(1, time.Now())
+		is["labels"].(map[string]any)["totalCount"] = 150
+		is["projectItems"].(map[string]any)["totalCount"] = 2
+		respond(w, map[string]any{"data": map[string]any{"repository": map[string]any{"issue": is}}})
+	}
+	var logged []string
+	log := funcr.New(func(prefix, args string) { logged = append(logged, args) }, funcr.Options{})
+	ctx := logr.NewContext(context.Background(), log)
+	if _, err := app.Client(7).Issue(ctx, "datum-cloud", "enhancements", 1, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(logged) != 1 || !strings.Contains(logged[0], "labels") || !strings.Contains(logged[0], `"total"=150`) {
+		t.Errorf("logged %q, want one line about the labels", logged)
+	}
 }

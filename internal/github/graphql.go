@@ -95,6 +95,95 @@ func (e Errors) ignorable() bool {
 	return len(e) > 0
 }
 
+// refused returns the indexes in the list at prefix (such as "search",
+// "nodes") that an error other than NOT_FOUND points into. An entry there
+// that came back null was refused, not missing.
+func (e Errors) refused(prefix ...any) map[int]bool {
+	out := map[int]bool{}
+	for _, x := range e {
+		if x.Type == "NOT_FOUND" || len(x.Path) <= len(prefix) || !slices.Equal(x.Path[:len(prefix)], prefix) {
+			continue
+		}
+		if i, ok := x.Path[len(prefix)].(float64); ok {
+			out[int(i)] = true
+		}
+	}
+	return out
+}
+
+// IncompleteError means GitHub refused some of the issues a query asked
+// for. It comes back alongside the rest of the results, which leave those
+// issues out.
+type IncompleteError struct {
+	// IDs are the node IDs of the refused issues, when the query named them.
+	IDs []string
+	// Missing is how many issues were refused.
+	Missing int
+	Err     Errors
+}
+
+func (e *IncompleteError) Error() string {
+	return fmt.Sprintf("GitHub refused %d issues: %v", e.Missing, e.Err)
+}
+
+func (e *IncompleteError) Unwrap() error { return e.Err }
+
+func (e *IncompleteError) add(id string, errs Errors) {
+	e.Missing++
+	if id != "" {
+		e.IDs = append(e.IDs, id)
+	}
+	for _, x := range errs {
+		if !slices.ContainsFunc(e.Err, func(y gqlError) bool { return y.Message == x.Message }) {
+			e.Err = append(e.Err, x)
+		}
+	}
+}
+
+// RateLimitError means GitHub refused a request for going over a rate limit,
+// either the hourly one or a secondary one.
+type RateLimitError struct {
+	// RetryAt is when GitHub will take requests again.
+	RetryAt time.Time
+	Message string
+}
+
+func (e *RateLimitError) Error() string {
+	return fmt.Sprintf("GitHub rate limit: %s (retry at %s)", e.Message, e.RetryAt.UTC().Format(time.RFC3339))
+}
+
+// secondaryRateLimitWait is how long to wait after a secondary rate limit
+// that gives no Retry-After: GitHub asks for at least a minute.
+const secondaryRateLimitWait = time.Minute
+
+// rateLimited returns a RateLimitError if a response refused the request
+// for a rate limit: a 429, or a 403 with Retry-After, no requests left, or a
+// message about a rate limit.
+func (a *App) rateLimited(h http.Header, status int, msg string) *RateLimitError {
+	retryAfter, remaining := h.Get("Retry-After"), h.Get("X-RateLimit-Remaining")
+	switch {
+	case status == http.StatusTooManyRequests:
+	case status == http.StatusForbidden && (retryAfter != "" || remaining == "0" || strings.Contains(strings.ToLower(msg), "rate limit")):
+	default:
+		return nil
+	}
+	return &RateLimitError{RetryAt: a.retryAt(h), Message: msg}
+}
+
+// retryAt is when a rate-limited request can be tried again: after
+// Retry-After, else at the hourly limit's reset when it has run out, else
+// after secondaryRateLimitWait.
+func (a *App) retryAt(h http.Header) time.Time {
+	now := a.now()
+	if s, err := strconv.Atoi(h.Get("Retry-After")); err == nil {
+		return now.Add(time.Duration(s) * time.Second)
+	}
+	if reset, err := strconv.ParseInt(h.Get("X-RateLimit-Reset"), 10, 64); err == nil && h.Get("X-RateLimit-Remaining") == "0" {
+		return time.Unix(reset, 0).UTC()
+	}
+	return now.Add(secondaryRateLimitWait)
+}
+
 // notFound reports whether every error is NOT_FOUND. Only then does a
 // missing node mean the issue is gone: an error on a non-null field, such
 // as projectItems, also nulls the issue that holds it.
@@ -108,7 +197,8 @@ func (e Errors) notFound() bool {
 }
 
 // query runs a GraphQL query and decodes data into out. It returns the
-// response's errors as Errors, after decoding whatever data came with them.
+// response's errors as Errors, after decoding whatever data came with them,
+// and a refusal for a rate limit as a *RateLimitError.
 func (c *Client) query(ctx context.Context, q string, vars map[string]any, out any) error {
 	body, err := json.Marshal(map[string]any{"query": q, "variables": vars})
 	if err != nil {
@@ -121,8 +211,12 @@ func (c *Client) query(ctx context.Context, q string, vars map[string]any, out a
 	defer resp.Body.Close()
 	c.recordRateLimit(resp.Header)
 	if resp.StatusCode != http.StatusOK {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("GitHub GraphQL: %s: %s", resp.Status, strings.TrimSpace(string(msg)))
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		msg := strings.TrimSpace(string(raw))
+		if rl := c.app.rateLimited(resp.Header, resp.StatusCode, msg); rl != nil {
+			return rl
+		}
+		return fmt.Errorf("GitHub GraphQL: %s: %s", resp.Status, msg)
 	}
 	var r struct {
 		Data   json.RawMessage `json:"data"`
@@ -134,6 +228,11 @@ func (c *Client) query(ctx context.Context, q string, vars map[string]any, out a
 	if len(r.Data) > 0 && string(r.Data) != "null" {
 		if err := json.Unmarshal(r.Data, out); err != nil {
 			return fmt.Errorf("GitHub GraphQL: decoding data: %w", err)
+		}
+	}
+	for _, e := range r.Errors {
+		if e.Type == "RATE_LIMITED" {
+			return &RateLimitError{RetryAt: c.app.retryAt(resp.Header), Message: e.Message}
 		}
 	}
 	if len(r.Errors) > 0 {

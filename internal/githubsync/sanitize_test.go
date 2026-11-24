@@ -79,6 +79,12 @@ func TestSanitizeHTML(t *testing.T) {
 			hasNot: []string{"tracker"},
 		},
 		{
+			name:   "img from another github.com path dropped",
+			in:     `<p>a</p><img src="https://github.com/settings/profile" alt="x">`,
+			want:   `<p>a</p>`,
+			hasNot: []string{"settings"},
+		},
+		{
 			name: "expiring attachment URL made permanent",
 			in: `<p><a target="_blank" rel="noopener noreferrer" href="https://private-user-images.githubusercontent.com/181685648/604055368-25addea2-357a-42c0-a1c8-fba0163382cc.png?jwt=eyJ0eXAi.eyJpc3Mi.3PCX&amp;x=1">` +
 				`<img width="1252" alt="Image" src="https://private-user-images.githubusercontent.com/181685648/604055368-25addea2-357a-42c0-a1c8-fba0163382cc.png?jwt=eyJ0eXAi.eyJpc3Mi.3PCX" class="js-gh-image-fallback"></a></p>`,
