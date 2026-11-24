@@ -30,7 +30,8 @@ spec:
       openAPIV3Schema:
         description: |-
           FeedbackSource configures what the feedback service syncs from one GitHub
-          organization and how GitHub fields map onto posts. There is one per org.
+          organization and how GitHub fields map onto posts. There is one per org,
+          named after it: a sweep treats every post of the org as its own.
 
           FeedbackSource is a Platform resource stored in etcd.
         properties:
@@ -165,6 +166,12 @@ spec:
                 - installationID
                 - org
                 type: object
+                x-kubernetes-validations:
+                - message: issues needs at least one issue type or label; a source
+                    that includes nothing would delete every post of the org
+                  rule: has(self.issues) && ((has(self.issues.issueTypes) && size(self.issues.issueTypes)
+                    > 0) || (has(self.issues.labels) && size(self.issues.labels) >
+                    0))
               statusMapping:
                 additionalProperties:
                   description: |-
@@ -280,6 +287,10 @@ spec:
                 type: object
             type: object
         type: object
+        x-kubernetes-validations:
+        - message: metadata.name must be spec.github.org in lower case, so there is
+            one source per org
+          rule: self.metadata.name == self.spec.github.org.lowerAscii()
     served: true
     storage: true
     subresources:

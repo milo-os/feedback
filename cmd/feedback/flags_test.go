@@ -66,3 +66,24 @@ func TestCheckUserCap(t *testing.T) {
 		}
 	}
 }
+
+func TestAppID(t *testing.T) {
+	for _, c := range []struct {
+		flag int64
+		env  string
+		want int64
+		ok   bool
+	}{
+		{flag: 7, env: "9", want: 7, ok: true},
+		{env: "5890001\n", want: 5890001, ok: true},
+		{env: " 12 ", want: 12, ok: true},
+		{env: ""},
+		{env: "abc"},
+	} {
+		t.Setenv("GITHUB_APP_ID", c.env)
+		got, err := appID(c.flag)
+		if got != c.want || (err == nil) != c.ok {
+			t.Errorf("appID(%d) with GITHUB_APP_ID=%q = %d, %v", c.flag, c.env, got, err)
+		}
+	}
+}

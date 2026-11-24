@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feedback-sync
+spec:
+  # One replica sweeps at a time; the other waits on the lease.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: feedback-sync
+  template:
+    metadata:
+      labels:
+        app: feedback-sync
+    spec:
+      serviceAccountName: feedback-sync
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: sync
+        image: ghcr.io/milo-os/feedback:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+          capabilities:
+            drop:
+            - ALL
+        command:
+        - /feedback
+        - sync
+        args:
+        # The milo-integration component mounts this kubeconfig.
+        - --milo-kubeconfig=/etc/kubernetes/milo/kubeconfig
+        - --leader-elect
+        - --leader-election-namespace=$(POD_NAMESPACE)
+        - --github-app-private-key-file=/etc/feedback/github/private-key
+        - --zap-encoder=json
+        env:
+        # The environment provides the feedback-github-app Secret: the
+        # "Datum Cloud Feedback" GitHub App's ID and private key.
+        - name: GITHUB_APP_ID
+          valueFrom:
+            secretKeyRef:
+              name: feedback-github-app
+              key: app-id
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        - containerPort: 8081
+          name: probes
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: probes
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: probes
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: github-app
+          mountPath: /etc/feedback/github
+          readOnly: true
+      volumes:
+      - name: github-app
+        secret:
+          secretName: feedback-github-app
+          items:
+          - key: private-key
+            path: private-key

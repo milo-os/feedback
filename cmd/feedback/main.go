@@ -25,7 +25,7 @@ func newRootCommand() *cobra.Command {
 roadmap posts synced from GitHub, votes, submissions and security reports.`,
 		SilenceUsage: true,
 	}
-	cmd.AddCommand(newOperatorCommand(), newUploadsCommand(), newVersionCommand())
+	cmd.AddCommand(newOperatorCommand(), newSyncCommand(), newUploadsCommand(), newVersionCommand())
 	return cmd
 }
 

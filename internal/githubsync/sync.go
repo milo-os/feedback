@@ -36,6 +36,11 @@ type GitHub interface {
 	// ProjectItems reads issues' project items through the app's
 	// installation on org.
 	ProjectItems(ctx context.Context, org string, ids []string, statusField string) (map[string][]github.ProjectItem, error)
+	// SearchIssues returns every issue matching an issue search.
+	SearchIssues(ctx context.Context, installationID int64, query, statusField string, now time.Time) ([]github.Issue, error)
+	// RateLimit is the installation's rate limit after its last request,
+	// or nil before any.
+	RateLimit(installationID int64) *github.RateLimit
 }
 
 // App adapts a github.App to GitHub.
@@ -53,6 +58,16 @@ func (a App) ProjectItems(ctx context.Context, org string, ids []string, statusF
 		return nil, err
 	}
 	return a.Client(id).ProjectItems(ctx, ids, statusField)
+}
+
+// SearchIssues implements GitHub.
+func (a App) SearchIssues(ctx context.Context, installationID int64, query, statusField string, now time.Time) ([]github.Issue, error) {
+	return a.Client(installationID).SearchIssues(ctx, query, statusField, now)
+}
+
+// RateLimit implements GitHub.
+func (a App) RateLimit(installationID int64) *github.RateLimit {
+	return a.Client(installationID).RateLimit()
 }
 
 // Syncer writes posts from GitHub issues.

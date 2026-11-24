@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,10 +77,17 @@ type fakeGitHub struct {
 	issues   map[string]*github.Issue
 	projects map[string][]github.ProjectItem // by issue ID, for ProjectItems
 	reads    []string                        // orgs whose installation ProjectItems used
+	// unindexed issues aren't returned by SearchIssues, as when search lags.
+	unindexed map[string]bool
+	searchErr error
+	// fail makes Issue fail for these keys, as GitHub does when it is down.
+	fail     map[string]error
+	searches int
+	rate     *github.RateLimit
 }
 
 func newFakeGitHub() *fakeGitHub {
-	return &fakeGitHub{issues: map[string]*github.Issue{}, projects: map[string][]github.ProjectItem{}}
+	return &fakeGitHub{issues: map[string]*github.Issue{}, projects: map[string][]github.ProjectItem{}, unindexed: map[string]bool{}, fail: map[string]error{}}
 }
 
 func key(org, repo string, n int32) string {
@@ -97,6 +106,9 @@ func (f *fakeGitHub) Issue(_ context.Context, installationID int64, owner, repo 
 	defer f.mu.Unlock()
 	if installationID == 0 {
 		return nil, fmt.Errorf("no installation")
+	}
+	if err := f.fail[key(owner, repo, number)]; err != nil {
+		return nil, err
 	}
 	is, ok := f.issues[key(owner, repo, number)]
 	if !ok {
@@ -120,14 +132,57 @@ func (f *fakeGitHub) ProjectItems(_ context.Context, org string, ids []string, _
 	return out, nil
 }
 
+// SearchIssues returns every public issue in the org the query names,
+// without parsing the rest: Match does the filtering.
+func (f *fakeGitHub) SearchIssues(_ context.Context, _ int64, query, _ string, _ time.Time) ([]github.Issue, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.searches++
+	if f.searchErr != nil {
+		return nil, f.searchErr
+	}
+	org, _, _ := strings.Cut(strings.TrimPrefix(query, "org:"), " ")
+	var out []github.Issue
+	for k, is := range f.issues {
+		if strings.EqualFold(is.Org, org) && is.Visibility == "public" && !f.unindexed[k] {
+			cp := *is
+			cp.Labels = slices.Clone(is.Labels)
+			out = append(out, cp)
+		}
+	}
+	slices.SortFunc(out, func(a, b github.Issue) int { return strings.Compare(a.ID, b.ID) })
+	return out, nil
+}
+
+func (f *fakeGitHub) RateLimit(int64) *github.RateLimit {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.rate
+}
+
 func testSource() *v1.FeedbackSource {
 	return &v1.FeedbackSource{ObjectMeta: metav1.ObjectMeta{Name: "datum-cloud"}, Spec: *testSpec()}
 }
 
-// testIssue is a matching issue in a repository unique to the test, so
-// tests sharing the API server don't share posts.
+var (
+	uniqNames sync.Map // *testing.T to its name
+	uniqRuns  atomic.Int64
+)
+
+// uniq is a name unique to this run of the test, so tests sharing the API
+// server, and repeated runs with -count, don't share posts or sources.
+func uniq(t *testing.T) string {
+	if v, ok := uniqNames.Load(t); ok {
+		return v.(string)
+	}
+	s := strings.ToLower(strings.NewReplacer("/", "-", "_", "-").Replace(t.Name())) + "-" + strconv.FormatInt(uniqRuns.Add(1), 10)
+	uniqNames.Store(t, s)
+	return s
+}
+
+// testIssue is a matching issue in a repository unique to the test.
 func testIssue(t *testing.T, n int32) *github.Issue {
-	repo := strings.ToLower(strings.NewReplacer("/", "-", "_", "-").Replace(t.Name()))
+	repo := uniq(t)
 	created := time.Date(2026, 9, 30, 14, 12, 0, 0, time.UTC)
 	return &github.Issue{
 		ID: fmt.Sprintf("I_%s_%d", repo, n), Org: "datum-cloud", Repo: repo, Number: n,

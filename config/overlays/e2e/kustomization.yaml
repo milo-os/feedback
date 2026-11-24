@@ -15,6 +15,8 @@
 #     configurations it registers in Milo.
 #   - Attachments live in MinIO in this namespace, through the s3-attachments
 #     component.
+#   - No feedback-sync: there is no GitHub App here. The tests write posts
+#     with sync's identity instead.
 #   - One replica each, and a 30s submission window so the rate limit test
 #     doesn't wait 10 minutes. The limit itself is the default.
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -43,6 +45,13 @@ images:
     newTag: e2e
 
 patches:
+  - target:
+      kind: Deployment
+      name: feedback-sync
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
   - target:
       kind: Deployment
       name: feedback-operator
