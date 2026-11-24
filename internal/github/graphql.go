@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -80,10 +81,14 @@ func (e Errors) Error() string {
 	return "GitHub GraphQL: " + strings.Join(msgs, "; ")
 }
 
-// onlyNotFound reports whether every error is NOT_FOUND.
-func (e Errors) onlyNotFound() bool {
+// ignorable reports whether the data that came with these errors can be
+// used: every error is NOT_FOUND (the node is null and the caller checks for
+// it), or is about a project item. An installation can't read another org's
+// project, so GitHub may refuse an item's project while returning the issue;
+// feedback-sync reads such projects through their own org's installation.
+func (e Errors) ignorable() bool {
 	for _, x := range e {
-		if x.Type != "NOT_FOUND" {
+		if x.Type != "NOT_FOUND" && !slices.Contains(x.Path, any("projectItems")) {
 			return false
 		}
 	}
@@ -146,7 +151,7 @@ func (c *Client) post(ctx context.Context, body []byte) (*http.Response, error) 
 		}
 		if resp.StatusCode == http.StatusUnauthorized && attempt == 0 {
 			resp.Body.Close()
-			c.app.forgetToken(c.installationID)
+			c.app.forgetToken(c.installationID, token)
 			continue
 		}
 		return resp, nil
@@ -165,8 +170,12 @@ func (c *Client) recordRateLimit(h http.Header) {
 	c.mu.Unlock()
 }
 
-func (a *App) forgetToken(installationID int64) {
+// forgetToken drops a token GitHub refused, unless another request has
+// already replaced it.
+func (a *App) forgetToken(installationID int64, token string) {
 	a.mu.Lock()
-	delete(a.tokens, installationID)
+	if a.tokens[installationID].token == token {
+		delete(a.tokens, installationID)
+	}
 	a.mu.Unlock()
 }

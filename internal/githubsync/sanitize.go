@@ -23,6 +23,22 @@ const (
 	summaryHardCut = 40
 )
 
+// imageSrc are the image URLs GitHub puts in rendered bodies.
+var imageSrc = regexp.MustCompile(`^https://(camo\.githubusercontent\.com|user-images\.githubusercontent\.com|avatars\.githubusercontent\.com|raw\.githubusercontent\.com|github\.com)/`)
+
+// privateUserImage is how GitHub renders an uploaded attachment: a signed
+// URL that expires five minutes after the body is fetched, and differs on
+// every fetch. The UUID names the same file at
+// https://github.com/user-attachments/assets/<uuid>, as in the markdown body.
+var privateUserImage = regexp.MustCompile(`https://private-user-images\.githubusercontent\.com/[0-9]+/[0-9]+-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:\.[A-Za-z0-9]+)?(?:\?[^"'\s<>]*)?`)
+
+// stableAttachments replaces expiring attachment URLs with their permanent
+// form, so a stored body keeps working and the same issue always sanitises
+// to the same HTML.
+func stableAttachments(body string) string {
+	return privateUserImage.ReplaceAllString(body, "https://github.com/user-attachments/assets/$1")
+}
+
 // bodyPolicy is the allow-list for issue bodies rendered by GitHub. A built
 // policy is safe for concurrent use.
 var bodyPolicy = newBodyPolicy()
@@ -54,11 +70,12 @@ func newBodyPolicy() *bluemonday.Policy {
 	p.RequireNoReferrerOnLinks(true)
 	p.AddTargetBlankToFullyQualifiedLinks(true)
 
-	// Images: https only, from any host (GitHub serves them through
-	// camo.githubusercontent.com and github.com/user-attachments). The URL
-	// schemes above still apply; this regexp narrows src to https. fixTags
-	// drops an img whose src was removed.
-	p.AllowAttrs("src").Matching(regexp.MustCompile(`^https://`)).OnElements("img")
+	// Images: https only, and only from GitHub, so a post never makes a
+	// reader's browser fetch from anywhere else. GitHub proxies external
+	// images through camo.githubusercontent.com and serves uploads from
+	// github.com/user-attachments (see stableAttachments). fixTags drops an
+	// img whose src was removed.
+	p.AllowAttrs("src").Matching(imageSrc).OnElements("img")
 	p.AllowAttrs("alt", "title").OnElements("img")
 	p.AllowAttrs("width", "height").Matching(digits).OnElements("img")
 
@@ -83,7 +100,7 @@ func newBodyPolicy() *bluemonday.Policy {
 // It returns "" when the sanitised HTML is longer than MaxBodyHTML, rather
 // than cut it mid-tag; callers then store only the summary.
 func SanitizeHTML(body string) string {
-	out := bodyPolicy.Sanitize(body)
+	out := bodyPolicy.Sanitize(stableAttachments(body))
 	if strings.Contains(out, "<input") || strings.Contains(out, "<img") {
 		out = fixTags(out)
 	}

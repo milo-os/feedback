@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -108,6 +109,10 @@ type projectItems struct {
 func (p projectItems) items() []ProjectItem {
 	var out []ProjectItem
 	for _, n := range p.Nodes {
+		if n.Project.Owner.Login == "" {
+			// The installation can't read this item's project.
+			continue
+		}
 		it := ProjectItem{Owner: n.Project.Owner.Login, Number: n.Project.Number}
 		if n.Status != nil {
 			it.Status = n.Status.Name
@@ -168,7 +173,7 @@ func (c *Client) Issue(ctx context.Context, owner, repo string, number int32, st
 	err := c.query(ctx, q, map[string]any{
 		"owner": owner, "repo": repo, "number": number, "statusField": statusFieldOrDefault(statusField),
 	}, &out)
-	if errs, ok := errors.AsType[Errors](err); ok && errs.onlyNotFound() {
+	if errs, ok := errors.AsType[Errors](err); ok && errs.ignorable() {
 		err = nil
 	}
 	if err != nil {
@@ -190,15 +195,31 @@ const searchPageSize = 50
 // earliest is before any GitHub issue was created.
 var earliest = time.Date(2008, 1, 1, 0, 0, 0, 0, time.UTC)
 
-// SearchIssues returns every issue matching an issue search query, such as
-// `org:datum-cloud is:issue is:public label:"Build"`. GitHub returns at most
-// 1000 results per query, so a query with more is split by creation date.
+// SearchIssues returns the issues matching an issue search query, such as
+// `org:datum-cloud is:issue is:public label:"Build"`, each once. GitHub
+// returns at most 1000 results per query, so a query with more is split by
+// creation date. Results are sorted by creation so new issues don't shift
+// the pages being read.
+//
+// Search isn't a complete list: its index lags, and an issue that stops
+// matching while the pages are read can push another off a page. Callers
+// must re-read an issue before deciding it's gone.
 func (c *Client) SearchIssues(ctx context.Context, query, statusField string, now time.Time) ([]Issue, error) {
+	query += " sort:created-asc"
 	issues, err := c.searchAll(ctx, query, statusField)
-	if !errors.Is(err, errTooMany) {
-		return issues, err
+	if errors.Is(err, errTooMany) {
+		issues, err = c.searchRange(ctx, query, statusField, earliest, now.Add(24*time.Hour))
 	}
-	return c.searchRange(ctx, query, statusField, earliest, now.Add(24*time.Hour))
+	if err != nil {
+		return nil, err
+	}
+	// Split ranges share their boundary second.
+	seen := make(map[string]bool, len(issues))
+	return slices.DeleteFunc(issues, func(is Issue) bool {
+		dup := seen[is.ID]
+		seen[is.ID] = true
+		return dup
+	}), nil
 }
 
 var errTooMany = errors.New("more search results than GitHub returns")
@@ -251,9 +272,13 @@ func (c *Client) searchAll(ctx context.Context, query, statusField string) ([]Is
 				Nodes []*issueNode `json:"nodes"`
 			} `json:"search"`
 		}
-		if err := c.query(ctx, q, map[string]any{
+		err := c.query(ctx, q, map[string]any{
 			"q": query, "first": searchPageSize, "after": after, "statusField": statusFieldOrDefault(statusField),
-		}, &out); err != nil {
+		}, &out)
+		if errs, ok := errors.AsType[Errors](err); ok && errs.ignorable() {
+			err = nil
+		}
+		if err != nil {
 			return nil, fmt.Errorf("searching %q: %w", query, err)
 		}
 		if out.Search.IssueCount > searchLimit {
@@ -296,7 +321,7 @@ fragment projectItemFields on ProjectV2Item {
 			} `json:"nodes"`
 		}
 		err := c.query(ctx, q, map[string]any{"ids": batch, "statusField": statusFieldOrDefault(statusField)}, &resp)
-		if errs, ok := errors.AsType[Errors](err); ok && errs.onlyNotFound() {
+		if errs, ok := errors.AsType[Errors](err); ok && errs.ignorable() {
 			err = nil
 		}
 		if err != nil {

@@ -23,8 +23,8 @@ func TestSanitizeHTML(t *testing.T) {
 		},
 		{
 			name:   "event handlers removed",
-			in:     `<p onclick="alert(1)">x</p><img src="https://example.com/a.png" onerror="alert(1)">`,
-			want:   `<p>x</p><img src="https://example.com/a.png">`,
+			in:     `<p onclick="alert(1)">x</p><img src="https://camo.githubusercontent.com/a" onerror="alert(1)">`,
+			want:   `<p>x</p><img src="https://camo.githubusercontent.com/a">`,
 			hasNot: []string{"onclick", "onerror"},
 		},
 		{
@@ -71,6 +71,20 @@ func TestSanitizeHTML(t *testing.T) {
 			in:     `<img src="data:image/png;base64,AAAA">`,
 			want:   ``,
 			hasNot: []string{"data:"},
+		},
+		{
+			name:   "img from outside GitHub dropped",
+			in:     `<p>a</p><img src="https://tracker.example.com/pixel.gif" alt="x">`,
+			want:   `<p>a</p>`,
+			hasNot: []string{"tracker"},
+		},
+		{
+			name: "expiring attachment URL made permanent",
+			in: `<p><a target="_blank" rel="noopener noreferrer" href="https://private-user-images.githubusercontent.com/181685648/604055368-25addea2-357a-42c0-a1c8-fba0163382cc.png?jwt=eyJ0eXAi.eyJpc3Mi.3PCX&amp;x=1">` +
+				`<img width="1252" alt="Image" src="https://private-user-images.githubusercontent.com/181685648/604055368-25addea2-357a-42c0-a1c8-fba0163382cc.png?jwt=eyJ0eXAi.eyJpc3Mi.3PCX" class="js-gh-image-fallback"></a></p>`,
+			want: `<p><a href="https://github.com/user-attachments/assets/25addea2-357a-42c0-a1c8-fba0163382cc" rel="nofollow noreferrer noopener" target="_blank">` +
+				`<img width="1252" alt="Image" src="https://github.com/user-attachments/assets/25addea2-357a-42c0-a1c8-fba0163382cc"></a></p>`,
+			hasNot: []string{"jwt", "private-user-images"},
 		},
 		{
 			name: "https img kept with allowed attributes",
@@ -150,6 +164,19 @@ func TestSanitizeHTML(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestSanitizeHTMLStable checks two fetches of the same body, whose
+// attachment URLs carry different signatures, sanitise to the same HTML, so
+// an unchanged issue doesn't rewrite its post.
+func TestSanitizeHTMLStable(t *testing.T) {
+	body := func(jwt string) string {
+		return `<img src="https://private-user-images.githubusercontent.com/1/2-25addea2-357a-42c0-a1c8-fba0163382cc.png?jwt=` + jwt + `">`
+	}
+	a, b := SanitizeHTML(body("first")), SanitizeHTML(body("second"))
+	if a != b || a == "" {
+		t.Errorf("same attachment sanitised differently: %q vs %q", a, b)
 	}
 }
 

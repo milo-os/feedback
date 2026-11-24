@@ -42,6 +42,7 @@ type FeedbackSourceSpec struct {
 // GitHubSource identifies a GitHub organization and the content to sync from it.
 type GitHubSource struct {
 	// Org is the GitHub organization login.
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`
 	Org string `json:"org"`
 
 	// InstallationID is the GitHub App installation ID for Org.
@@ -72,32 +73,40 @@ type GitHubSource struct {
 	Changelog *ChangelogSource `json:"changelog,omitempty"`
 }
 
-// RepositorySelector includes and excludes repositories by name or glob.
+// RepositorySelector includes and excludes repositories by name or glob
+// (path.Match syntax), ignoring case.
 type RepositorySelector struct {
 	// +optional
 	// +listType=set
+	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9._*?\[\]-]+$`
 	Include []string `json:"include,omitempty"`
 	// +optional
 	// +listType=set
+	// +kubebuilder:validation:items:Pattern=`^[A-Za-z0-9._*?\[\]-]+$`
 	Exclude []string `json:"exclude,omitempty"`
 }
 
-// IssueSelector selects issues by type and label.
+// IssueSelector selects issues by type and label, ignoring case. Values
+// can't contain a double quote, which GitHub search can't escape.
 type IssueSelector struct {
 	// +optional
 	// +listType=set
+	// +kubebuilder:validation:items:Pattern=`^[^"]+$`
 	IssueTypes []string `json:"issueTypes,omitempty"`
 	// +optional
 	// +listType=set
+	// +kubebuilder:validation:items:Pattern=`^[^"]+$`
 	Labels []string `json:"labels,omitempty"`
 	// +optional
 	// +listType=set
+	// +kubebuilder:validation:items:Pattern=`^[^"]+$`
 	ExcludeLabels []string `json:"excludeLabels,omitempty"`
 }
 
 // ProjectRef identifies a GitHub ProjectV2 and the fields the service uses.
 type ProjectRef struct {
 	// Owner is the org that owns the project.
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`
 	Owner string `json:"owner"`
 	// Number is the project number.
 	Number int32 `json:"number"`

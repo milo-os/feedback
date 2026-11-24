@@ -194,6 +194,65 @@ func TestInstallationID(t *testing.T) {
 	if id, err = app.InstallationID(context.Background(), "Datum-Cloud"); err != nil || id != 7 {
 		t.Fatalf("InstallationID() cached = %d, %v", id, err)
 	}
+	// Looked up again after an hour, in case the app was reinstalled.
+	now := time.Now().Add(installationTTL + time.Minute)
+	app.now = func() time.Time { return now }
+	if _, err = app.InstallationID(context.Background(), "Datum-Cloud"); err == nil {
+		t.Fatal("expected a fresh lookup once the cached ID expired")
+	}
+}
+
+// TestProjectItemsAnotherOrgCantRead: GitHub refuses a project the
+// installation can't read but still returns the issue.
+func TestProjectItemsAnotherOrgCantRead(t *testing.T) {
+	f, app := newFake(t)
+	created := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)
+	forbidden := []any{map[string]any{
+		"type": "FORBIDDEN", "message": "Resource not accessible by integration",
+		"path": []any{"repository", "issue", "projectItems", "nodes", 0, "project"},
+	}}
+	issue := func() map[string]any {
+		is := issueJSON(9, created)
+		is["projectItems"] = map[string]any{"nodes": []any{map[string]any{"project": nil, "status": nil}}}
+		return is
+	}
+	f.graphql = func(w http.ResponseWriter, q string, _ map[string]any) {
+		if strings.Contains(q, "search(") {
+			respond(w, map[string]any{"data": map[string]any{"search": map[string]any{
+				"issueCount": 1, "pageInfo": map[string]any{"hasNextPage": false}, "nodes": []any{issue()},
+			}}, "errors": forbidden})
+			return
+		}
+		respond(w, map[string]any{"data": map[string]any{"repository": map[string]any{"issue": issue()}}, "errors": forbidden})
+	}
+	is, err := app.Client(7).Issue(context.Background(), "milo-os", "x", 9, "")
+	if err != nil || is.Number != 9 || len(is.ProjectItems) != 0 {
+		t.Fatalf("Issue() = %+v, %v; want the issue without the unreadable item", is, err)
+	}
+	found, err := app.Client(7).SearchIssues(context.Background(), "org:milo-os", "", time.Now())
+	if err != nil || len(found) != 1 {
+		t.Fatalf("SearchIssues() = %d issues, %v", len(found), err)
+	}
+}
+
+// TestForgetTokenKeepsANewerOne: a request that got a 401 on an old token
+// doesn't drop a token another request has since stored.
+func TestForgetTokenKeepsANewerOne(t *testing.T) {
+	_, app := newFake(t)
+	ctx := context.Background()
+	old, err := app.Token(ctx, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.forgetToken(7, old)
+	newer, err := app.Token(ctx, 7)
+	if err != nil || newer == old {
+		t.Fatalf("Token() after forgetting = %q, %v", newer, err)
+	}
+	app.forgetToken(7, old)
+	if got, _ := app.Token(ctx, 7); got != newer {
+		t.Errorf("forgetting a stale token dropped the newer one: got %q, want %q", got, newer)
+	}
 }
 
 func issueJSON(n int, created time.Time) map[string]any {
@@ -352,8 +411,16 @@ func TestSearchIssues(t *testing.T) {
 	if len(seen) != total {
 		t.Errorf("found %d distinct issues, want %d", len(seen), total)
 	}
+	if len(issues) != total {
+		t.Errorf("SearchIssues() returned %d issues, want each once: %d", len(issues), total)
+	}
 	if !strings.Contains(strings.Join(queries, "\n"), "created:") {
 		t.Error("expected the query to be split by creation date")
+	}
+	for _, q := range queries {
+		if !strings.Contains(q, "sort:created-asc") {
+			t.Errorf("query %q isn't sorted by creation", q)
+		}
 	}
 
 	// A query under the limit isn't split.

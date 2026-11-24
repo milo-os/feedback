@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,8 +40,17 @@ type App struct {
 
 	mu      sync.Mutex
 	tokens  map[int64]installationToken
-	orgs    map[string]int64
+	orgs    map[string]orgInstallation
 	clients map[int64]*Client
+}
+
+// installationTTL is how long an org's installation ID is cached, so a
+// reinstalled app is picked up without a restart.
+const installationTTL = time.Hour
+
+type orgInstallation struct {
+	id        int64
+	fetchedAt time.Time
 }
 
 type installationToken struct {
@@ -77,7 +87,7 @@ func NewApp(id int64, privateKeyPEM []byte, opts ...AppOption) (*App, error) {
 		http:    &http.Client{Timeout: 30 * time.Second},
 		now:     time.Now,
 		tokens:  map[int64]installationToken{},
-		orgs:    map[string]int64{},
+		orgs:    map[string]orgInstallation{},
 	}
 	for _, o := range opts {
 		o(a)
@@ -155,19 +165,19 @@ func (a *App) Token(ctx context.Context, installationID int64) (string, error) {
 func (a *App) InstallationID(ctx context.Context, org string) (int64, error) {
 	key := strings.ToLower(org)
 	a.mu.Lock()
-	id, ok := a.orgs[key]
+	cached, ok := a.orgs[key]
 	a.mu.Unlock()
-	if ok {
-		return id, nil
+	if ok && a.now().Sub(cached.fetchedAt) < installationTTL {
+		return cached.id, nil
 	}
 	var out struct {
 		ID int64 `json:"id"`
 	}
-	if err := a.appRequest(ctx, http.MethodGet, "/orgs/"+org+"/installation", &out); err != nil {
+	if err := a.appRequest(ctx, http.MethodGet, "/orgs/"+url.PathEscape(org)+"/installation", &out); err != nil {
 		return 0, fmt.Errorf("finding the installation on %s: %w", org, err)
 	}
 	a.mu.Lock()
-	a.orgs[key] = out.ID
+	a.orgs[key] = orgInstallation{id: out.ID, fetchedAt: a.now()}
 	a.mu.Unlock()
 	return out.ID, nil
 }

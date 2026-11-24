@@ -1,6 +1,7 @@
 package githubsync
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -38,14 +39,16 @@ func State(spec *v1.FeedbackSourceSpec, is *github.Issue) v1.PostState {
 	return v1.PostStateNone
 }
 
-// lookupStatus finds key in the mapping, exactly or else ignoring case.
+// lookupStatus finds key in the mapping, exactly or else ignoring case. Keys
+// that differ only in case are tried in sorted order, so the result doesn't
+// depend on map order.
 func lookupStatus(m map[string]v1.PostState, key string) (v1.PostState, bool) {
 	if s, ok := m[key]; ok {
 		return s, true
 	}
-	for k, s := range m {
+	for _, k := range slices.Sorted(maps.Keys(m)) {
 		if strings.EqualFold(k, key) {
-			return s, true
+			return m[k], true
 		}
 	}
 	return "", false
