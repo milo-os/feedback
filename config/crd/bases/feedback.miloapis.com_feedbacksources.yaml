@@ -88,16 +88,19 @@ spec:
                     properties:
                       excludeLabels:
                         items:
+                          pattern: ^[^"]+$
                           type: string
                         type: array
                         x-kubernetes-list-type: set
                       issueTypes:
                         items:
+                          pattern: ^[^"]+$
                           type: string
                         type: array
                         x-kubernetes-list-type: set
                       labels:
                         items:
+                          pattern: ^[^"]+$
                           type: string
                         type: array
                         x-kubernetes-list-type: set
@@ -113,6 +116,7 @@ spec:
                     type: object
                   org:
                     description: Org is the GitHub organization login.
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$
                     type: string
                   project:
                     description: |-
@@ -125,6 +129,7 @@ spec:
                         type: integer
                       owner:
                         description: Owner is the org that owns the project.
+                        pattern: ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$
                         type: string
                       statusField:
                         description: StatusField is the single-select field that holds
@@ -145,11 +150,13 @@ spec:
                     properties:
                       exclude:
                         items:
+                          pattern: ^([A-Za-z0-9._*?-]|\[([A-Za-z0-9._](-[A-Za-z0-9._])?)+\])+$
                           type: string
                         type: array
                         x-kubernetes-list-type: set
                       include:
                         items:
+                          pattern: ^([A-Za-z0-9._*?-]|\[([A-Za-z0-9._](-[A-Za-z0-9._])?)+\])+$
                           type: string
                         type: array
                         x-kubernetes-list-type: set

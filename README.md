@@ -166,6 +166,8 @@ client certificates and get Kubernetes RBAC in Milo (`config/milo/rbac`).
 cmd/feedback/             operator, uploads and version commands
 internal/attachments/     the attachments bucket
 internal/controller/      reconcilers
+internal/github/          GitHub App auth and GraphQL reads of issues
+internal/githubsync/      which issues become posts, and how they map
 internal/identity/        who a request comes from, from Milo's user info
 internal/index/           cache field indexes shared by reconcilers and webhooks
 internal/milo/            voter lookups in Milo
