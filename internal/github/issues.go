@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/go-logr/logr"
 )
 
 // Issue is what feedback-sync reads about a GitHub issue.
@@ -53,8 +55,8 @@ fragment issueFields on Issue {
   id number url title bodyHTML bodyText state stateReason createdAt updatedAt
   issueType { name }
   repository { name visibility owner { login } }
-  labels(first: 100) { nodes { name } }
-  projectItems(first: 20, includeArchived: false) { nodes { ...projectItemFields } }
+  labels(first: 100) { totalCount nodes { name } }
+  projectItems(first: 20, includeArchived: false) { totalCount nodes { ...projectItemFields } }
 }
 fragment projectItemFields on ProjectV2Item {
   project { number owner { ... on Organization { login } ... on User { login } } }
@@ -85,7 +87,8 @@ type issueNode struct {
 		} `json:"owner"`
 	} `json:"repository"`
 	Labels struct {
-		Nodes []struct {
+		TotalCount int `json:"totalCount"`
+		Nodes      []struct {
 			Name string `json:"name"`
 		} `json:"nodes"`
 	} `json:"labels"`
@@ -93,7 +96,8 @@ type issueNode struct {
 }
 
 type projectItems struct {
-	Nodes []struct {
+	TotalCount int `json:"totalCount"`
+	Nodes      []struct {
 		Project struct {
 			Number int32 `json:"number"`
 			Owner  struct {
@@ -120,6 +124,23 @@ func (p projectItems) items() []ProjectItem {
 		out = append(out, it)
 	}
 	return out
+}
+
+// logTruncated logs an issue whose labels or project items didn't all fit in
+// one read: feedback-sync maps only the ones it got.
+func (n *issueNode) logTruncated(ctx context.Context) {
+	logTruncated(ctx, n.URL, "labels", len(n.Labels.Nodes), n.Labels.TotalCount)
+	n.ProjectItems.logTruncated(ctx, n.URL)
+}
+
+func (p projectItems) logTruncated(ctx context.Context, issue string) {
+	logTruncated(ctx, issue, "project items", len(p.Nodes), p.TotalCount)
+}
+
+func logTruncated(ctx context.Context, issue, what string, got, total int) {
+	if total > got {
+		logr.FromContextOrDiscard(ctx).Info("GitHub returned only some of an issue's "+what, "issue", issue, "got", got, "total", total)
+	}
 }
 
 func (n *issueNode) issue() Issue {
@@ -183,6 +204,7 @@ func (c *Client) Issue(ctx context.Context, owner, repo string, number int32, st
 		}
 		return nil, ErrNotFound
 	}
+	out.Repository.Issue.logTruncated(ctx)
 	is := out.Repository.Issue.issue()
 	return &is, nil
 }
@@ -204,30 +226,37 @@ var earliest = time.Date(2008, 1, 1, 0, 0, 0, 0, time.UTC)
 //
 // Search isn't a complete list: its index lags, and an issue that stops
 // matching while the pages are read can push another off a page. Callers
-// must re-read an issue before deciding it's gone.
+// must re-read an issue before deciding it's gone. When GitHub refuses some
+// results, SearchIssues returns the rest with an *IncompleteError.
 func (c *Client) SearchIssues(ctx context.Context, query, statusField string, now time.Time) ([]Issue, error) {
 	query += " sort:created-asc"
-	issues, err := c.searchAll(ctx, query, statusField)
+	var inc IncompleteError
+	issues, err := c.searchAll(ctx, query, statusField, &inc)
 	if errors.Is(err, errTooMany) {
-		issues, err = c.searchRange(ctx, query, statusField, earliest, now.Add(24*time.Hour))
+		inc = IncompleteError{}
+		issues, err = c.searchRange(ctx, query, statusField, earliest, now.Add(24*time.Hour), &inc)
 	}
 	if err != nil {
 		return nil, err
 	}
 	// Split ranges share their boundary second.
 	seen := make(map[string]bool, len(issues))
-	return slices.DeleteFunc(issues, func(is Issue) bool {
+	issues = slices.DeleteFunc(issues, func(is Issue) bool {
 		dup := seen[is.ID]
 		seen[is.ID] = true
 		return dup
-	}), nil
+	})
+	if inc.Missing > 0 {
+		return issues, fmt.Errorf("searching %q: %w", query, &inc)
+	}
+	return issues, nil
 }
 
 var errTooMany = errors.New("more search results than GitHub returns")
 
-func (c *Client) searchRange(ctx context.Context, query, statusField string, from, to time.Time) ([]Issue, error) {
+func (c *Client) searchRange(ctx context.Context, query, statusField string, from, to time.Time, inc *IncompleteError) ([]Issue, error) {
 	q := fmt.Sprintf("%s created:%s..%s", query, from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
-	issues, err := c.searchAll(ctx, q, statusField)
+	issues, err := c.searchAll(ctx, q, statusField, inc)
 	if !errors.Is(err, errTooMany) {
 		return issues, err
 	}
@@ -235,13 +264,13 @@ func (c *Client) searchRange(ctx context.Context, query, statusField string, fro
 		return nil, fmt.Errorf("searching %q: more than %d issues created in one minute", query, searchLimit)
 	}
 	mid := from.Add(to.Sub(from) / 2).Truncate(time.Second)
-	a, err := c.searchRange(ctx, query, statusField, from, mid)
+	a, err := c.searchRange(ctx, query, statusField, from, mid, inc)
 	if err != nil {
 		return nil, err
 	}
 	// Ranges are inclusive at both ends, so an issue created at mid is in
 	// both halves; callers dedupe by ID.
-	b, err := c.searchRange(ctx, query, statusField, mid, to)
+	b, err := c.searchRange(ctx, query, statusField, mid, to, inc)
 	if err != nil {
 		return nil, err
 	}
@@ -249,8 +278,9 @@ func (c *Client) searchRange(ctx context.Context, query, statusField string, fro
 }
 
 // searchAll pages through one query. It returns errTooMany, without paging,
-// when the query has more results than GitHub returns.
-func (c *Client) searchAll(ctx context.Context, query, statusField string) ([]Issue, error) {
+// when the query has more results than GitHub returns, and counts refused
+// results in inc.
+func (c *Client) searchAll(ctx context.Context, query, statusField string, inc *IncompleteError) ([]Issue, error) {
 	const q = `query($q: String!, $first: Int!, $after: String, $statusField: String!) {
   search(type: ISSUE, query: $q, first: $first, after: $after) {
     issueCount
@@ -276,7 +306,8 @@ func (c *Client) searchAll(ctx context.Context, query, statusField string) ([]Is
 		err := c.query(ctx, q, map[string]any{
 			"q": query, "first": searchPageSize, "after": after, "statusField": statusFieldOrDefault(statusField),
 		}, &out)
-		if errs, ok := errors.AsType[Errors](err); ok && errs.ignorable() {
+		errs, isErrs := errors.AsType[Errors](err)
+		if isErrs && errs.ignorable() {
 			err = nil
 		}
 		if err != nil {
@@ -285,8 +316,16 @@ func (c *Client) searchAll(ctx context.Context, query, statusField string) ([]Is
 		if out.Search.IssueCount > searchLimit {
 			return nil, errTooMany
 		}
-		for _, n := range out.Search.Nodes {
-			if n != nil && n.ID != "" {
+		// A null node is one the installation can't see, unless an error
+		// points at it: an error on a field such as projectItems nulls the
+		// whole issue.
+		refused := errs.refused("search", "nodes")
+		for i, n := range out.Search.Nodes {
+			switch {
+			case n == nil && refused[i]:
+				inc.add("", errs)
+			case n != nil && n.ID != "":
+				n.logTruncated(ctx)
 				issues = append(issues, n.issue())
 			}
 		}
@@ -301,10 +340,12 @@ func (c *Client) searchAll(ctx context.Context, query, statusField string) ([]Is
 // ProjectItems reads the project items of issues by node ID, as this
 // installation sees them. A project owned by another org is only visible to
 // that org's installation, so feedback-sync reads it there. Issues that
-// aren't found are left out.
+// aren't found are left out. When GitHub refuses some issues' project items,
+// ProjectItems returns the rest with an *IncompleteError naming them: a
+// refused issue isn't one that's off the project.
 func (c *Client) ProjectItems(ctx context.Context, ids []string, statusField string) (map[string][]ProjectItem, error) {
 	const q = `query($ids: [ID!]!, $statusField: String!) {
-  nodes(ids: $ids) { ... on Issue { id projectItems(first: 20, includeArchived: false) { nodes { ...projectItemFields } } } }
+  nodes(ids: $ids) { ... on Issue { id projectItems(first: 20, includeArchived: false) { totalCount nodes { ...projectItemFields } } } }
 }
 fragment projectItemFields on ProjectV2Item {
   project { number owner { ... on Organization { login } ... on User { login } } }
@@ -313,6 +354,7 @@ fragment projectItemFields on ProjectV2Item {
   }
 }`
 	out := map[string][]ProjectItem{}
+	var inc IncompleteError
 	for start := 0; start < len(ids); start += 100 {
 		batch := ids[start:min(start+100, len(ids))]
 		var resp struct {
@@ -322,17 +364,26 @@ fragment projectItemFields on ProjectV2Item {
 			} `json:"nodes"`
 		}
 		err := c.query(ctx, q, map[string]any{"ids": batch, "statusField": statusFieldOrDefault(statusField)}, &resp)
-		if errs, ok := errors.AsType[Errors](err); ok && errs.ignorable() {
+		errs, isErrs := errors.AsType[Errors](err)
+		if isErrs && errs.ignorable() {
 			err = nil
 		}
 		if err != nil {
 			return nil, fmt.Errorf("reading project items: %w", err)
 		}
-		for _, n := range resp.Nodes {
-			if n != nil && n.ID != "" {
+		refused := errs.refused("nodes")
+		for i, n := range resp.Nodes {
+			switch {
+			case n == nil && refused[i] && i < len(batch):
+				inc.add(batch[i], errs)
+			case n != nil && n.ID != "":
+				n.ProjectItems.logTruncated(ctx, n.ID)
 				out[n.ID] = n.ProjectItems.items()
 			}
 		}
+	}
+	if inc.Missing > 0 {
+		return out, fmt.Errorf("reading project items: %w", &inc)
 	}
 	return out, nil
 }

@@ -6,6 +6,7 @@ toolchain go1.27.4
 
 require (
 	github.com/evanphx/json-patch/v5 v5.9.11
+	github.com/go-logr/logr v1.4.4
 	github.com/google/cel-go v0.29.2
 	github.com/johannesboyne/gofakes3 v1.2.0
 	github.com/microcosm-cc/bluemonday v1.0.27
@@ -13,6 +14,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	gocloud.dev v0.48.0
 	golang.org/x/net v0.62.0
+	golang.org/x/sync v0.25.0
 	golang.org/x/time v0.16.0
 	k8s.io/api v0.37.2
 	k8s.io/apiextensions-apiserver v0.37.0
@@ -67,7 +69,6 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.6 // indirect
-	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v1.0.0 // indirect
@@ -126,7 +127,6 @@ require (
 	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
-	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/term v0.48.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
