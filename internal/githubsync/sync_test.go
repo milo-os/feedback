@@ -2,6 +2,7 @@ package githubsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -77,6 +78,7 @@ type fakeGitHub struct {
 	issues   map[string]*github.Issue
 	projects map[string][]github.ProjectItem // by issue ID, for ProjectItems
 	reads    []string                        // orgs whose installation ProjectItems used
+	refused  map[string]bool                 // issue IDs whose project items GitHub refuses
 	// unindexed issues aren't returned by SearchIssues, as when search lags.
 	unindexed map[string]bool
 	searchErr error
@@ -124,10 +126,17 @@ func (f *fakeGitHub) ProjectItems(_ context.Context, org string, ids []string, _
 	defer f.mu.Unlock()
 	f.reads = append(f.reads, org)
 	out := map[string][]github.ProjectItem{}
+	var inc github.IncompleteError
 	for _, id := range ids {
-		if items, ok := f.projects[id]; ok {
+		if f.refused[id] {
+			inc.IDs = append(inc.IDs, id)
+			inc.Missing++
+		} else if items, ok := f.projects[id]; ok {
 			out[id] = items
 		}
+	}
+	if inc.Missing > 0 {
+		return out, &inc
 	}
 	return out, nil
 }
@@ -138,7 +147,7 @@ func (f *fakeGitHub) SearchIssues(_ context.Context, _ int64, query, _ string, _
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.searches++
-	if f.searchErr != nil {
+	if _, ok := errors.AsType[*github.IncompleteError](f.searchErr); f.searchErr != nil && !ok {
 		return nil, f.searchErr
 	}
 	org, _, _ := strings.Cut(strings.TrimPrefix(query, "org:"), " ")
@@ -151,7 +160,7 @@ func (f *fakeGitHub) SearchIssues(_ context.Context, _ int64, query, _ string, _
 		}
 	}
 	slices.SortFunc(out, func(a, b github.Issue) int { return strings.Compare(a.ID, b.ID) })
-	return out, nil
+	return out, f.searchErr
 }
 
 func (f *fakeGitHub) RateLimit(int64) *github.RateLimit {
@@ -537,6 +546,22 @@ func TestSyncProjectInAnotherOrg(t *testing.T) {
 	}
 	if !slices.Equal(gh.reads, []string{"datum-cloud"}) {
 		t.Errorf("ProjectItems read through %v, want the datum-cloud installation", gh.reads)
+	}
+
+	// An issue whose project items GitHub refuses isn't synced as if it
+	// weren't on the project; the others still are.
+	refused := testIssue(t, 9)
+	refused.Org, refused.IssueType, refused.ProjectItems = "milo-os", "Feature", nil
+	gh.refused = map[string]bool{refused.ID: true}
+	other := *is
+	other.Title = "Renamed"
+	results, err := s.Sync(context.Background(), src, []*github.Issue{refused, &other})
+	if _, ok := errors.AsType[*github.IncompleteError](err); !ok || !slices.Equal(results, []Result{"", Updated}) {
+		t.Errorf("Sync() = %v, %v; want the refused issue to fail and the other updated", results, err)
+	}
+	var none v1.Post
+	if err := c.Get(context.Background(), client.ObjectKey{Name: v1.PostName("milo-os", refused.Repo, refused.Number)}, &none); !apierrors.IsNotFound(err) {
+		t.Errorf("post for the refused issue: %v, want not found", err)
 	}
 }
 
