@@ -233,6 +233,18 @@ func TestProjectItemsAnotherOrgCantRead(t *testing.T) {
 	if err != nil || len(found) != 1 {
 		t.Fatalf("SearchIssues() = %d issues, %v", len(found), err)
 	}
+
+	// An error on projectItems itself nulls the issue: that's an error, not
+	// a deleted issue.
+	f.graphql = func(w http.ResponseWriter, _ string, _ map[string]any) {
+		respond(w, map[string]any{"data": map[string]any{"repository": map[string]any{"issue": nil}}, "errors": []any{map[string]any{
+			"type": "FORBIDDEN", "message": "Resource not accessible by integration",
+			"path": []any{"repository", "issue", "projectItems"},
+		}}})
+	}
+	if _, err := app.Client(7).Issue(context.Background(), "milo-os", "x", 9, ""); err == nil || errors.Is(err, ErrNotFound) {
+		t.Errorf("Issue() with a nulled issue = %v, want an error that isn't ErrNotFound", err)
+	}
 }
 
 // TestForgetTokenKeepsANewerOne: a request that got a 401 on an old token

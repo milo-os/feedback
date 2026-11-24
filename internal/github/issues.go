@@ -173,13 +173,14 @@ func (c *Client) Issue(ctx context.Context, owner, repo string, number int32, st
 	err := c.query(ctx, q, map[string]any{
 		"owner": owner, "repo": repo, "number": number, "statusField": statusFieldOrDefault(statusField),
 	}, &out)
-	if errs, ok := errors.AsType[Errors](err); ok && errs.ignorable() {
-		err = nil
-	}
-	if err != nil {
+	errs, isErrs := errors.AsType[Errors](err)
+	if err != nil && !(isErrs && errs.ignorable()) {
 		return nil, err
 	}
 	if out.Repository == nil || out.Repository.Issue == nil {
+		if isErrs && !errs.notFound() {
+			return nil, errs
+		}
 		return nil, ErrNotFound
 	}
 	is := out.Repository.Issue.issue()

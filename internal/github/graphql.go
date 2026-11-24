@@ -95,6 +95,18 @@ func (e Errors) ignorable() bool {
 	return len(e) > 0
 }
 
+// notFound reports whether every error is NOT_FOUND. Only then does a
+// missing node mean the issue is gone: an error on a non-null field, such
+// as projectItems, also nulls the issue that holds it.
+func (e Errors) notFound() bool {
+	for _, x := range e {
+		if x.Type != "NOT_FOUND" {
+			return false
+		}
+	}
+	return len(e) > 0
+}
+
 // query runs a GraphQL query and decodes data into out. It returns the
 // response's errors as Errors, after decoding whatever data came with them.
 func (c *Client) query(ctx context.Context, q string, vars map[string]any, out any) error {
