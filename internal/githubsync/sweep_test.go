@@ -3,6 +3,7 @@ package githubsync
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -197,6 +198,61 @@ func TestSweepWaitsForTheRateLimit(t *testing.T) {
 	reconcileSource(t, r, src)
 	if gh.searches == 0 {
 		t.Error("didn't sweep once the limit reset")
+	}
+}
+
+// TestSweepBacksOffWhenRateLimited: a rate limit from search, or from
+// re-reading a post's issue, stops the sweep until GitHub's retry time.
+func TestSweepBacksOffWhenRateLimited(t *testing.T) {
+	c := milo(t)
+	gh := newFakeGitHub()
+	src := sweepSource(t, c)
+	s := newSyncer(c, gh)
+	r := &SourceReconciler{Client: c, Syncer: s}
+	is := sweepIssue(t, src, "enhancements", 1)
+	gh.put(is)
+	syncIssue(t, s, src, is, Created)
+
+	check := func(what string) {
+		t.Helper()
+		res, got := reconcileSource(t, r, src)
+		if res.RequeueAfter < 3*time.Minute || res.RequeueAfter > 4*time.Minute {
+			t.Errorf("%s: RequeueAfter = %v, want just after GitHub's retry time", what, res.RequeueAfter)
+		}
+		ready := meta.FindStatusCondition(got.Status.Conditions, v1.FeedbackSourceConditionReady)
+		if ready == nil || ready.Reason != v1.FeedbackSourceReasonRateLimited || !strings.Contains(ready.Message, "secondary") {
+			t.Errorf("%s: Ready = %+v, want RateLimited", what, ready)
+		}
+		getPost(t, c, v1.PostName(is.Org, is.Repo, is.Number))
+	}
+	limited := &github.RateLimitError{RetryAt: s.Now().Add(3 * time.Minute), Message: "You have exceeded a secondary rate limit"}
+	gh.searchErr = limited
+	check("search")
+
+	gh.searchErr = nil
+	k := key(is.Org, is.Repo, is.Number)
+	gh.unindexed[k] = true
+	gh.fail[k] = fmt.Errorf("reading: %w", limited)
+	check("re-reading a post's issue")
+}
+
+// TestSweepWithRefusedSearchResults: when GitHub refuses some search
+// results, the rest are synced and the source reports the failure.
+func TestSweepWithRefusedSearchResults(t *testing.T) {
+	c := milo(t)
+	gh := newFakeGitHub()
+	src := sweepSource(t, c)
+	s := newSyncer(c, gh)
+	r := &SourceReconciler{Client: c, Syncer: s}
+	is := sweepIssue(t, src, "enhancements", 1)
+	gh.put(is)
+	gh.searchErr = &github.IncompleteError{Missing: 1}
+
+	_, got := reconcileSource(t, r, src)
+	getPost(t, c, v1.PostName(is.Org, is.Repo, is.Number))
+	ready := meta.FindStatusCondition(got.Status.Conditions, v1.FeedbackSourceConditionReady)
+	if ready == nil || ready.Reason != v1.FeedbackSourceReasonSyncFailed || !strings.Contains(ready.Message, "refused") {
+		t.Errorf("Ready = %+v, want SyncFailed naming the refusal", ready)
 	}
 }
 

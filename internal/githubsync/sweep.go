@@ -98,22 +98,20 @@ func (r *SourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	installation := src.Spec.GitHub.InstallationID
 
 	if rl := r.Syncer.GitHub.RateLimit(installation); rl != nil && rl.Remaining < r.minRateLimit() && now.Before(rl.ResetAt) {
-		wait := rl.ResetAt.Sub(now) + 5*time.Second
 		log.Info("Waiting for the GitHub rate limit to reset", "remaining", rl.Remaining, "resetAt", rl.ResetAt)
-		err := r.writeStatus(ctx, &src, metav1.Condition{
-			Type:    v1.FeedbackSourceConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  v1.FeedbackSourceReasonRateLimited,
-			Message: fmt.Sprintf("%d GitHub API points left; the next sweep starts after the limit resets at %s", rl.Remaining, rl.ResetAt.UTC().Format(time.RFC3339)),
-		}, nil)
-		r.logStatusError(ctx, err)
-		return ctrl.Result{RequeueAfter: wait}, nil
+		return r.waitForRateLimit(ctx, &src, rl.ResetAt,
+			fmt.Sprintf("%d GitHub API points left; the next sweep starts after the limit resets at %s", rl.Remaining, rl.ResetAt.UTC().Format(time.RFC3339)))
 	}
 
 	start := r.Syncer.now()
 	synced, sweepErr := r.Sweep(ctx, &src)
 	if ctx.Err() != nil {
 		return ctrl.Result{}, ctx.Err()
+	}
+	if rl, ok := errors.AsType[*github.RateLimitError](sweepErr); ok {
+		log.Info("GitHub rate limited the sweep", "retryAt", rl.RetryAt, "message", rl.Message, "postsSynced", synced)
+		return r.waitForRateLimit(ctx, &src, rl.RetryAt,
+			fmt.Sprintf("GitHub rate limited the sweep: %s; the next sweep starts at %s", truncate(rl.Message, maxMessage/2), rl.RetryAt.UTC().Format(time.RFC3339)))
 	}
 	if sweepErr != nil {
 		log.Error(sweepErr, "Sweep failed", "postsSynced", synced)
@@ -142,6 +140,19 @@ func (r *SourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{RequeueAfter: r.interval()}, nil
 }
 
+// waitForRateLimit reports that the source is waiting for GitHub's rate
+// limit and requeues it shortly after until.
+func (r *SourceReconciler) waitForRateLimit(ctx context.Context, src *v1.FeedbackSource, until time.Time, message string) (ctrl.Result, error) {
+	err := r.writeStatus(ctx, src, metav1.Condition{
+		Type:    v1.FeedbackSourceConditionReady,
+		Status:  metav1.ConditionFalse,
+		Reason:  v1.FeedbackSourceReasonRateLimited,
+		Message: message,
+	}, nil)
+	r.logStatusError(ctx, err)
+	return ctrl.Result{RequeueAfter: max(until.Sub(r.Syncer.now()), 0) + 5*time.Second}, nil
+}
+
 // logStatusError logs a failed status write. Reconcile doesn't return it:
 // controller-runtime retries an error within milliseconds, ignoring
 // RequeueAfter, and that would run the whole sweep again.
@@ -161,16 +172,21 @@ func kept(res Result) bool {
 //
 // Search can miss issues (its index lags, and an issue that stopped matching
 // isn't returned at all), so each of the source's posts the searches didn't
-// return is re-read on its own before anything is deleted.
+// return is re-read on its own before anything is deleted. When GitHub
+// refuses some search results, the rest are still synced and the sweep
+// fails. A rate limit stops the sweep where it is.
 func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (int, error) {
 	gh := src.Spec.GitHub
 	count := func(res Result) { syncedPosts.WithLabelValues(src.Name, string(res)).Inc() }
 
 	var issues []*github.Issue
+	var errs []error
 	ids := map[string]bool{}
 	for _, q := range SearchQueries(&gh) {
 		found, err := r.Syncer.GitHub.SearchIssues(ctx, gh.InstallationID, q, statusField(src), r.Syncer.now())
-		if err != nil {
+		if _, ok := errors.AsType[*github.IncompleteError](err); ok {
+			errs = append(errs, err)
+		} else if err != nil {
 			return 0, err
 		}
 		for i := range found {
@@ -185,9 +201,9 @@ func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (i
 	seen := map[string]bool{}
 	results, err := r.Syncer.Sync(ctx, src, issues)
 	if results == nil && err != nil {
-		return 0, err
+		return 0, errors.Join(append(errs, err)...)
 	}
-	errs := []error{err}
+	errs = append(errs, err)
 	for i, res := range results {
 		seen[v1.PostName(issues[i].Org, issues[i].Repo, issues[i].Number)] = true
 		if res == "" {
@@ -216,6 +232,10 @@ func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (i
 			continue
 		}
 		res, err := r.Syncer.SyncIssue(ctx, src, repo, number)
+		if _, ok := errors.AsType[*github.RateLimitError](err); ok {
+			count("failed")
+			return synced, err
+		}
 		if err != nil {
 			count("failed")
 			errs = append(errs, err)
