@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	"go.miloapis.com/feedback/internal/github"
@@ -86,6 +87,9 @@ type fakeGitHub struct {
 	fail     map[string]error
 	searches int
 	rate     *github.RateLimit
+	// unreturned are issue IDs ProjectItems leaves out, as when the project
+	// owner's installation can't find them.
+	unreturned map[string]bool
 }
 
 func newFakeGitHub() *fakeGitHub {
@@ -128,11 +132,12 @@ func (f *fakeGitHub) ProjectItems(_ context.Context, org string, ids []string, _
 	out := map[string][]github.ProjectItem{}
 	var inc github.IncompleteError
 	for _, id := range ids {
-		if f.refused[id] {
+		switch {
+		case f.refused[id]:
 			inc.IDs = append(inc.IDs, id)
 			inc.Missing++
-		} else if items, ok := f.projects[id]; ok {
-			out[id] = items
+		case !f.unreturned[id]:
+			out[id] = f.projects[id]
 		}
 	}
 	if inc.Missing > 0 {
@@ -489,6 +494,11 @@ func TestSyncTransferredToAnotherOrg(t *testing.T) {
 	syncIssue(t, s, miloOS, is, Created)
 
 	// The issue moves to datum-cloud, whose source has synced it already.
+	datumCloud := testSource()
+	if err := c.Create(context.Background(), datumCloud); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.Delete(context.Background(), datumCloud) })
 	moved := *is
 	moved.Org, moved.Number = "datum-cloud", 7
 	gh.put(&moved)
@@ -512,6 +522,141 @@ func TestSyncTransferredToAnotherOrg(t *testing.T) {
 	if err != nil || res[0] != Skipped {
 		t.Errorf("Sync(another org's issue) = %v, %v; want skipped", res, err)
 	}
+
+	// Moved to an org no source includes it from: the old post would point
+	// at a post that never gets made, so it's deleted.
+	other := testIssue(t, 6)
+	other.Org = "milo-os"
+	gh.put(other)
+	syncIssue(t, s, miloOS, other, Created)
+	elsewhere := *other
+	elsewhere.Org = "elsewhere"
+	gh.mu.Lock()
+	gh.issues[key(other.Org, other.Repo, other.Number)] = &elsewhere
+	gh.mu.Unlock()
+	syncIssue(t, s, miloOS, other, Deleted)
+	wantGone(t, c, v1.PostName(other.Org, other.Repo, other.Number))
+}
+
+// TestSyncTransferredOutOfTheSource: an issue moved to a repository the
+// source doesn't include has no new post, so its old post is deleted rather
+// than merged into nothing.
+func TestSyncTransferredOutOfTheSource(t *testing.T) {
+	c := milo(t)
+	gh := newFakeGitHub()
+	s := newSyncer(c, gh)
+	src := testSource()
+	for n, move := range map[int32]func(*github.Issue){
+		1: func(is *github.Issue) { is.Repo, is.Visibility = is.Repo+"-private", "private" },
+		2: func(is *github.Issue) { is.Repo = "infra" },
+	} {
+		is := testIssue(t, n)
+		gh.put(is)
+		syncIssue(t, s, src, is, Created)
+		moved := *is
+		moved.Number = 100 + n
+		move(&moved)
+		gh.mu.Lock()
+		gh.issues[key(is.Org, is.Repo, is.Number)] = &moved
+		gh.mu.Unlock()
+		syncIssue(t, s, src, is, Deleted)
+		wantGone(t, c, v1.PostName(is.Org, is.Repo, is.Number))
+		wantGone(t, c, v1.PostName(moved.Org, moved.Repo, moved.Number))
+	}
+}
+
+// TestSyncBatchWithAFailure: one issue failing doesn't stop the others.
+func TestSyncBatchWithAFailure(t *testing.T) {
+	milo(t)
+	wc, err := client.NewWithWatch(envCfg.Config, client.Options{Scheme: scheme})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b, d := testIssue(t, 1), testIssue(t, 2), testIssue(t, 3)
+	broken := v1.PostName(b.Org, b.Repo, b.Number)
+	c := interceptor.NewClient(wc, interceptor.Funcs{
+		Apply: func(ctx context.Context, c client.WithWatch, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+			if u, ok := obj.(interface{ GetName() string }); ok && u.GetName() == broken {
+				return errors.New("the API server is unhappy")
+			}
+			return c.Apply(ctx, obj, opts...)
+		},
+	})
+	s := newSyncer(c, newFakeGitHub())
+	results, err := s.Sync(context.Background(), testSource(), []*github.Issue{a, b, d})
+	if err == nil || !strings.Contains(err.Error(), broken) || !slices.Equal(results, []Result{Created, "", Created}) {
+		t.Errorf("Sync() = %v, %v; want the others created and an error for %s", results, err, broken)
+	}
+	getPost(t, c, v1.PostName(a.Org, a.Repo, a.Number))
+	getPost(t, c, v1.PostName(d.Org, d.Repo, d.Number))
+	wantGone(t, c, broken)
+}
+
+// TestSyncSkipsOlderReads: an issue read before the one its post was synced
+// from doesn't overwrite it, as when a sweep's search results land after a
+// webhook's read.
+func TestSyncSkipsOlderReads(t *testing.T) {
+	c := milo(t)
+	s := newSyncer(c, newFakeGitHub())
+	src := testSource()
+	is := testIssue(t, 1)
+	name := v1.PostName(is.Org, is.Repo, is.Number)
+	run := func(is *github.Issue, want Result) {
+		t.Helper()
+		res, err := s.Sync(context.Background(), src, []*github.Issue{is})
+		if err != nil || res[0] != want {
+			t.Fatalf("Sync() = %v, %v; want %s", res, err, want)
+		}
+	}
+	run(is, Created)
+
+	older := *is
+	older.Title, older.UpdatedAt = "Older title", is.UpdatedAt.Add(-time.Minute)
+	run(&older, Unchanged)
+	if p := getPost(t, c, name); p.Status.Title != is.Title {
+		t.Errorf("title = %q, want the newer read's", p.Status.Title)
+	}
+
+	// A project Status change doesn't move updatedAt, so an equal time syncs.
+	same := *is
+	same.ProjectItems = []github.ProjectItem{{Owner: "datum-cloud", Number: 22, Status: "Planning"}}
+	run(&same, Updated)
+	if p := getPost(t, c, name); p.Status.State != v1.PostStatePlanning {
+		t.Errorf("state = %s, want planning", p.Status.State)
+	}
+}
+
+// TestSyncCreateWhenThePostExists: when a stale read misses a post that
+// exists, applying it reports Updated, not Created.
+func TestSyncCreateWhenThePostExists(t *testing.T) {
+	c := milo(t)
+	s := newSyncer(c, newFakeGitHub())
+	src := testSource()
+	is := testIssue(t, 1)
+	res, err := s.Sync(context.Background(), src, []*github.Issue{is})
+	if err != nil || res[0] != Created {
+		t.Fatalf("Sync() = %v, %v", res, err)
+	}
+	s.Reader = notFoundReader{}
+	changed := *is
+	changed.Title = "Renamed"
+	if res, err = s.Sync(context.Background(), src, []*github.Issue{&changed}); err != nil || res[0] != Updated {
+		t.Errorf("Sync() with a stale read = %v, %v; want updated", res, err)
+	}
+	if p := getPost(t, c, v1.PostName(is.Org, is.Repo, is.Number)); p.Status.Title != "Renamed" {
+		t.Errorf("title = %q", p.Status.Title)
+	}
+}
+
+// notFoundReader is a cache that hasn't seen anything yet.
+type notFoundReader struct{}
+
+func (notFoundReader) Get(_ context.Context, key client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
+	return apierrors.NewNotFound(v1.SchemeGroupVersion.WithResource("posts").GroupResource(), key.Name)
+}
+
+func (notFoundReader) List(context.Context, client.ObjectList, ...client.ListOption) error {
+	return nil
 }
 
 func TestSyncNeverCreatesANonMatchingPost(t *testing.T) {
@@ -562,6 +707,18 @@ func TestSyncProjectInAnotherOrg(t *testing.T) {
 	var none v1.Post
 	if err := c.Get(context.Background(), client.ObjectKey{Name: v1.PostName("milo-os", refused.Repo, refused.Number)}, &none); !apierrors.IsNotFound(err) {
 		t.Errorf("post for the refused issue: %v, want not found", err)
+	}
+
+	// An issue the project owner's installation doesn't return keeps its
+	// post's state rather than reading as off the project.
+	gh.refused = nil
+	gh.unreturned = map[string]bool{is.ID: true}
+	results, err = s.Sync(context.Background(), src, []*github.Issue{&other})
+	if err == nil || !slices.Equal(results, []Result{""}) {
+		t.Errorf("Sync() = %v, %v; want a failure for the unreturned issue", results, err)
+	}
+	if p := getPost(t, c, v1.PostName("milo-os", is.Repo, is.Number)); p.Status.State != v1.PostStateOnDeck {
+		t.Errorf("state = %s, want on-deck kept", p.Status.State)
 	}
 }
 

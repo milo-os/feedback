@@ -131,7 +131,9 @@ func statusField(src *v1.FeedbackSource) string {
 // A transferred issue keeps its old post, marked as merged into the post for
 // its new location, so the operator moves its votes and follows there. The
 // new location is synced too when it is in the source's org; another org's
-// posts are left to that org's source.
+// posts are left to that org's source. When the new location won't have a
+// post (a private or excluded repository, or an org no source includes it
+// from), the old post is deleted instead.
 func (s *Syncer) SyncIssue(ctx context.Context, src *v1.FeedbackSource, repo string, number int32) (Result, error) {
 	org := src.Spec.GitHub.Org
 	name := v1.PostName(org, repo, number)
@@ -142,20 +144,70 @@ func (s *Syncer) SyncIssue(ctx context.Context, src *v1.FeedbackSource, repo str
 	if err != nil {
 		return "", fmt.Errorf("reading %s/%s#%d: %w", org, repo, number, err)
 	}
-	if moved := v1.PostName(is.Org, is.Repo, is.Number); moved != name {
+	if v1.PostName(is.Org, is.Repo, is.Number) != name {
 		// GitHub answers for a transferred issue from its new location.
-		if strings.EqualFold(is.Org, org) {
-			if _, err := s.Sync(ctx, src, []*github.Issue{is}); err != nil {
-				return "", err
-			}
-		}
-		return s.markMoved(ctx, name, moved)
+		return s.syncMoved(ctx, src, name, is)
 	}
 	results, err := s.Sync(ctx, src, []*github.Issue{is})
 	if err != nil {
 		return "", err
 	}
 	return results[0], nil
+}
+
+// syncMoved handles an issue GitHub answered for from a new location. The
+// result is the old post's, unless that post had nothing to do (it's gone,
+// or was already marked moved), when it is the new location's.
+func (s *Syncer) syncMoved(ctx context.Context, src *v1.FeedbackSource, name string, is *github.Issue) (Result, error) {
+	target := v1.PostName(is.Org, is.Repo, is.Number)
+	var targetRes Result
+	if strings.EqualFold(is.Org, src.Spec.GitHub.Org) {
+		results, err := s.Sync(ctx, src, []*github.Issue{is})
+		if err != nil {
+			return "", err
+		}
+		targetRes = results[0]
+		if !kept(targetRes) {
+			return s.remove(ctx, name, "the issue moved to a repository the source doesn't include")
+		}
+	} else {
+		included, err := s.includedByItsSource(ctx, is)
+		if err != nil {
+			return "", err
+		}
+		if !included {
+			return s.remove(ctx, name, fmt.Sprintf("the issue moved to %s, where no source includes it", is.Org))
+		}
+	}
+	res, err := s.markMoved(ctx, name, target)
+	if err != nil {
+		return "", err
+	}
+	if res != Moved && targetRes != "" {
+		return targetRes, nil
+	}
+	return res, nil
+}
+
+// includedByItsSource reports whether the FeedbackSource for an issue's org
+// includes it, so it has a post or will have one after that source's next
+// sweep.
+func (s *Syncer) includedByItsSource(ctx context.Context, is *github.Issue) (bool, error) {
+	var other v1.FeedbackSource
+	err := s.reader().Get(ctx, client.ObjectKey{Name: strings.ToLower(is.Org)}, &other)
+	if apierrors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("reading the %s FeedbackSource: %w", strings.ToLower(is.Org), err)
+	}
+	ok, _ := Match(&other.Spec.GitHub, is)
+	return ok, nil
+}
+
+// kept reports whether a result leaves the issue with a post.
+func kept(res Result) bool {
+	return res == Created || res == Updated || res == Unchanged
 }
 
 // Sync makes the posts for issues already read from GitHub match them, as
@@ -194,8 +246,8 @@ func (s *Syncer) Sync(ctx context.Context, src *v1.FeedbackSource, issues []*git
 // readProjectItems reads project items from the project owner's
 // installation when the project belongs to another org: an installation
 // only sees its own org's projects. It returns the IDs of issues whose items
-// GitHub refused, which mustn't be synced as if they weren't on the project,
-// or nil if it couldn't read any.
+// GitHub refused or didn't return, which mustn't be synced as if they
+// weren't on the project, or nil if it couldn't read any.
 func (s *Syncer) readProjectItems(ctx context.Context, src *v1.FeedbackSource, issues []*github.Issue) (map[string]bool, error) {
 	refused := map[string]bool{}
 	p := src.Spec.GitHub.Project
@@ -214,10 +266,21 @@ func (s *Syncer) readProjectItems(ctx context.Context, src *v1.FeedbackSource, i
 	} else if err != nil {
 		return nil, fmt.Errorf("reading the %s project: %w", p.Owner, err)
 	}
+	var missing []string
 	for _, is := range issues {
-		if !refused[is.ID] {
-			is.ProjectItems = items[is.ID]
+		if refused[is.ID] {
+			continue
 		}
+		got, ok := items[is.ID]
+		if !ok {
+			refused[is.ID] = true
+			missing = append(missing, fmt.Sprintf("%s/%s#%d", is.Org, is.Repo, is.Number))
+			continue
+		}
+		is.ProjectItems = got
+	}
+	if len(missing) > 0 {
+		err = errors.Join(err, fmt.Errorf("the %s installation didn't return %s", p.Owner, strings.Join(missing, ", ")))
 	}
 	if err != nil {
 		return refused, fmt.Errorf("reading the %s project: %w", p.Owner, err)
@@ -231,18 +294,27 @@ func (s *Syncer) syncOne(ctx context.Context, src *v1.FeedbackSource, is *github
 		// Another org's source owns this issue's post.
 		return Skipped, nil
 	}
+	var post v1.Post
+	err := s.reader().Get(ctx, client.ObjectKey{Name: name}, &post)
+	exists := err == nil
+	if err != nil && !apierrors.IsNotFound(err) {
+		return "", fmt.Errorf("reading post %s: %w", name, err)
+	}
+	if exists && olderThanPost(is, &post) {
+		// The post was synced from a newer read, as when a webhook read the
+		// issue after a sweep's search did. Writing this one would undo it.
+		logf.FromContext(ctx).V(1).Info("Skipping an issue read older than its post", "post", name)
+		return Unchanged, nil
+	}
 	if ok, why := Match(&src.Spec.GitHub, is); !ok {
+		if !exists {
+			return Skipped, nil
+		}
 		return s.remove(ctx, name, why)
 	}
 	want := Desired(&src.Spec, is)
-
-	var post v1.Post
-	err := s.reader().Get(ctx, client.ObjectKey{Name: name}, &post)
-	switch {
-	case apierrors.IsNotFound(err):
+	if !exists {
 		return s.create(ctx, name, want)
-	case err != nil:
-		return "", fmt.Errorf("reading post %s: %w", name, err)
 	}
 	if post.DeletionTimestamp != nil {
 		return "", fmt.Errorf("post %s is being deleted; it is created again on the next sync", name)
@@ -250,7 +322,7 @@ func (s *Syncer) syncOne(ctx context.Context, src *v1.FeedbackSource, is *github
 
 	res := Unchanged
 	if !sameLabels(syncLabels(post.Labels), want.Labels) {
-		if err := s.applyLabels(ctx, name, want.Labels); err != nil {
+		if _, err := s.applyLabels(ctx, name, want.Labels); err != nil {
 			return "", err
 		}
 		res = Updated
@@ -264,20 +336,28 @@ func (s *Syncer) syncOne(ctx context.Context, src *v1.FeedbackSource, is *github
 	return res, nil
 }
 
-// create creates the post, then applies its labels and status. Creating it
-// bare keeps every field feedback-sync sets owned by its apply, so a later
-// apply that leaves a label out removes it.
+// olderThanPost reports whether an issue was read before the read its post
+// was last synced from. GitHub's updatedAt has whole seconds, and a project
+// Status change doesn't move it, so an equal time is synced.
+func olderThanPost(is *github.Issue, post *v1.Post) bool {
+	gh := post.Status.GitHub
+	return gh != nil && is.UpdatedAt.UTC().Truncate(time.Second).Before(gh.UpdatedAt.Time)
+}
+
+// create creates the post by applying its labels, which keeps every field
+// feedback-sync sets owned by its apply, then applies its status. The post
+// may already exist when the read said it didn't (a stale cache, or another
+// writer); it is Updated then.
 func (s *Syncer) create(ctx context.Context, name string, want DesiredPost) (Result, error) {
-	post := &v1.Post{ObjectMeta: metav1.ObjectMeta{Name: name}}
-	err := s.Client.Create(ctx, post, client.FieldOwner(FieldManager))
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return "", fmt.Errorf("creating post %s: %w", name, err)
-	}
-	if err := s.applyLabels(ctx, name, want.Labels); err != nil {
+	got, err := s.applyLabels(ctx, name, want.Labels)
+	if err != nil {
 		return "", err
 	}
 	if err := s.applyStatus(ctx, name, want.Status); err != nil {
 		return "", err
+	}
+	if _, synced, _ := unstructured.NestedMap(got.Object, "status", "github"); synced {
+		return Updated, nil
 	}
 	logf.FromContext(ctx).Info("Created post", "post", name)
 	return Created, nil
@@ -306,7 +386,7 @@ func (s *Syncer) markMoved(ctx context.Context, name, target string) (Result, er
 
 	res := Unchanged
 	if !sameLabels(syncLabels(post.Labels), labels) {
-		if err := s.applyLabels(ctx, name, labels); err != nil {
+		if _, err := s.applyLabels(ctx, name, labels); err != nil {
 			return "", err
 		}
 		res = Moved
@@ -369,7 +449,9 @@ func sameLabels(a, b map[string]string) bool {
 	return true
 }
 
-func (s *Syncer) applyLabels(ctx context.Context, name string, labels map[string]string) error {
+// applyLabels applies the post's labels, creating the post if there is none,
+// and returns the post as the API server has it after the apply.
+func (s *Syncer) applyLabels(ctx context.Context, name string, labels map[string]string) (*unstructured.Unstructured, error) {
 	l := make(map[string]any, len(labels))
 	for k, v := range labels {
 		l[k] = v
@@ -380,9 +462,9 @@ func (s *Syncer) applyLabels(ctx context.Context, name string, labels map[string
 		"metadata":   map[string]any{"name": name, "labels": l},
 	}}
 	if err := s.Client.Apply(ctx, client.ApplyConfigurationFromUnstructured(u), client.FieldOwner(FieldManager), client.ForceOwnership); err != nil {
-		return fmt.Errorf("applying labels to post %s: %w", name, err)
+		return nil, fmt.Errorf("applying labels to post %s: %w", name, err)
 	}
-	return nil
+	return u, nil
 }
 
 func (s *Syncer) applyStatus(ctx context.Context, name string, st SyncedStatus) error {

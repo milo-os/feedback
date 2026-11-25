@@ -162,11 +162,6 @@ func (r *SourceReconciler) logStatusError(ctx context.Context, err error) {
 	}
 }
 
-// kept reports whether a result leaves the issue with a post.
-func kept(res Result) bool {
-	return res == Created || res == Updated || res == Unchanged
-}
-
 // Sweep syncs every issue the source includes and removes posts whose issue
 // no longer matches. It returns how many of the source's issues have posts.
 //
