@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -61,7 +62,28 @@ type SourceReconciler struct {
 	// points left, it waits for the limit to reset. Defaults to
 	// DefaultMinRateLimit.
 	MinRateLimit int
+
+	mu sync.Mutex
+	// unwritten holds, by source name, the status of a finished sweep that
+	// couldn't be written, so a retry writes it without sweeping again.
+	unwritten map[string]unwrittenStatus
 }
+
+type unwrittenStatus struct {
+	generation int64
+	ready      metav1.Condition
+	completed  *v1.ReconcileStatus
+	// next is when the next sweep is due.
+	next time.Time
+}
+
+// ItemsFailedError means a sweep finished, but some issues or posts failed
+// to sync. Sweeping again straight away is unlikely to fix them, so the
+// source waits for its next sweep.
+type ItemsFailedError struct{ Err error }
+
+func (e *ItemsFailedError) Error() string { return e.Err.Error() }
+func (e *ItemsFailedError) Unwrap() error { return e.Err }
 
 func (r *SourceReconciler) interval() time.Duration {
 	if r.Interval > 0 {
@@ -95,12 +117,16 @@ func (r *SourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 	now := r.Syncer.now()
-	installation := src.Spec.GitHub.InstallationID
+	if u, ok := r.takeUnwritten(src.Name); ok && u.generation == src.Generation {
+		return r.finish(ctx, &src, u)
+	}
 
-	if rl := r.Syncer.GitHub.RateLimit(installation); rl != nil && rl.Remaining < r.minRateLimit() && now.Before(rl.ResetAt) {
-		log.Info("Waiting for the GitHub rate limit to reset", "remaining", rl.Remaining, "resetAt", rl.ResetAt)
-		return r.waitForRateLimit(ctx, &src, rl.ResetAt,
-			fmt.Sprintf("%d GitHub API points left; the next sweep starts after the limit resets at %s", rl.Remaining, rl.ResetAt.UTC().Format(time.RFC3339)))
+	for _, inst := range r.installations(ctx, &src) {
+		if rl := r.Syncer.GitHub.RateLimit(inst.id); rl != nil && rl.Remaining < r.minRateLimit() && now.Before(rl.ResetAt) {
+			log.Info("Waiting for the GitHub rate limit to reset", "org", inst.org, "remaining", rl.Remaining, "resetAt", rl.ResetAt)
+			return r.waitForRateLimit(ctx, &src, rl.ResetAt,
+				fmt.Sprintf("%d GitHub API points left on the %s installation; the next sweep starts after the limit resets at %s", rl.Remaining, inst.org, rl.ResetAt.UTC().Format(time.RFC3339)))
+		}
 	}
 
 	start := r.Syncer.now()
@@ -113,31 +139,85 @@ func (r *SourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return r.waitForRateLimit(ctx, &src, rl.RetryAt,
 			fmt.Sprintf("GitHub rate limited the sweep: %s; the next sweep starts at %s", truncate(rl.Message, maxMessage/2), rl.RetryAt.UTC().Format(time.RFC3339)))
 	}
+	failed := metav1.Condition{
+		Type:   v1.FeedbackSourceConditionReady,
+		Status: metav1.ConditionFalse,
+		Reason: v1.FeedbackSourceReasonSyncFailed,
+	}
+	if _, ok := errors.AsType[*ItemsFailedError](sweepErr); ok {
+		// The sweep finished; only some items failed. They're retried with
+		// the next sweep, not by sweeping the whole source again now.
+		log.Error(sweepErr, "Some issues failed to sync", "postsSynced", synced)
+		failed.Message = truncate(sweepErr.Error(), maxMessage)
+		return r.finish(ctx, &src, unwrittenStatus{generation: src.Generation, ready: failed, next: r.Syncer.now().Add(r.interval())})
+	}
 	if sweepErr != nil {
+		// Search or listing posts failed, so the sweep didn't get far.
 		log.Error(sweepErr, "Sweep failed", "postsSynced", synced)
-		err := r.writeStatus(ctx, &src, metav1.Condition{
-			Type:    v1.FeedbackSourceConditionReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  v1.FeedbackSourceReasonSyncFailed,
-			Message: truncate(sweepErr.Error(), maxMessage),
-		}, nil)
-		r.logStatusError(ctx, err)
+		failed.Message = truncate(sweepErr.Error(), maxMessage)
+		r.logStatusError(ctx, r.writeStatus(ctx, &src, failed, nil))
 		return ctrl.Result{RequeueAfter: r.retry()}, nil
 	}
 	log.Info("Swept source", "postsSynced", synced, "took", r.Syncer.now().Sub(start).Round(time.Millisecond))
-	err := r.writeStatus(ctx, &src, metav1.Condition{
-		Type:    v1.FeedbackSourceConditionReady,
-		Status:  metav1.ConditionTrue,
-		Reason:  v1.FeedbackSourceReasonSynced,
-		Message: fmt.Sprintf("%d posts synced from %s", synced, src.Spec.GitHub.Org),
-	}, &v1.ReconcileStatus{CompletedAt: metav1.NewTime(r.Syncer.now().UTC().Truncate(time.Second)), PostsSynced: int32(synced)})
-	if err != nil {
-		// Try the status again soon rather than wait a whole interval, but
-		// not at once: returning the error would sweep again straight away.
+	return r.finish(ctx, &src, unwrittenStatus{
+		generation: src.Generation,
+		ready: metav1.Condition{
+			Type:    v1.FeedbackSourceConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  v1.FeedbackSourceReasonSynced,
+			Message: fmt.Sprintf("%d posts synced from %s", synced, src.Spec.GitHub.Org),
+		},
+		completed: &v1.ReconcileStatus{CompletedAt: metav1.NewTime(r.Syncer.now().UTC().Truncate(time.Second)), PostsSynced: int32(synced)},
+		next:      r.Syncer.now().Add(r.interval()),
+	})
+}
+
+// finish writes the status of a finished sweep and requeues the source for
+// its next sweep. When the write fails, the status is kept and written on a
+// retry soon, without sweeping again. Returning the error instead would make
+// controller-runtime retry within milliseconds, ignoring RequeueAfter.
+func (r *SourceReconciler) finish(ctx context.Context, src *v1.FeedbackSource, st unwrittenStatus) (ctrl.Result, error) {
+	if err := r.writeStatus(ctx, src, st.ready, st.completed); err != nil {
 		r.logStatusError(ctx, err)
-		return ctrl.Result{RequeueAfter: r.retry()}, nil
+		r.mu.Lock()
+		if r.unwritten == nil {
+			r.unwritten = map[string]unwrittenStatus{}
+		}
+		r.unwritten[src.Name] = st
+		r.mu.Unlock()
+		return ctrl.Result{RequeueAfter: min(r.retry(), max(st.next.Sub(r.Syncer.now()), 0))}, nil
 	}
-	return ctrl.Result{RequeueAfter: r.interval()}, nil
+	return ctrl.Result{RequeueAfter: max(st.next.Sub(r.Syncer.now()), time.Second)}, nil
+}
+
+func (r *SourceReconciler) takeUnwritten(name string) (unwrittenStatus, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	u, ok := r.unwritten[name]
+	delete(r.unwritten, name)
+	return u, ok
+}
+
+type installation struct {
+	org string
+	id  int64
+}
+
+// installations are the installations a sweep of the source spends: its
+// own, and the project owner's when the project is in another org.
+func (r *SourceReconciler) installations(ctx context.Context, src *v1.FeedbackSource) []installation {
+	gh := src.Spec.GitHub
+	out := []installation{{org: gh.Org, id: gh.InstallationID}}
+	if p := gh.Project; p != nil && !strings.EqualFold(p.Owner, gh.Org) {
+		id, err := r.Syncer.GitHub.InstallationID(ctx, p.Owner)
+		if err != nil {
+			// Reading the project fails the same way; the sweep reports it.
+			logf.FromContext(ctx).Error(err, "Finding the project owner's installation", "org", p.Owner)
+		} else {
+			out = append(out, installation{org: p.Owner, id: id})
+		}
+	}
+	return out
 }
 
 // waitForRateLimit reports that the source is waiting for GitHub's rate
@@ -168,19 +248,22 @@ func (r *SourceReconciler) logStatusError(ctx context.Context, err error) {
 // Search can miss issues (its index lags, and an issue that stopped matching
 // isn't returned at all), so each of the source's posts the searches didn't
 // return is re-read on its own before anything is deleted. When GitHub
-// refuses some search results, the rest are still synced and the sweep
-// fails. A rate limit stops the sweep where it is.
+// refuses some search results, the rest are still synced. Failures of single
+// issues or posts are returned as an *ItemsFailedError once the sweep has
+// finished. A rate limit stops the sweep where it is. Posts marked merged
+// into another (a transferred issue's old post) are left alone.
 func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (int, error) {
 	gh := src.Spec.GitHub
 	count := func(res Result) { syncedPosts.WithLabelValues(src.Name, string(res)).Inc() }
 
 	var issues []*github.Issue
-	var errs []error
+	// itemErrs are failures of single issues or posts.
+	var itemErrs []error
 	ids := map[string]bool{}
 	for _, q := range SearchQueries(&gh) {
 		found, err := r.Syncer.GitHub.SearchIssues(ctx, gh.InstallationID, q, statusField(src), r.Syncer.now())
 		if _, ok := errors.AsType[*github.IncompleteError](err); ok {
-			errs = append(errs, err)
+			itemErrs = append(itemErrs, err)
 		} else if err != nil {
 			return 0, err
 		}
@@ -196,9 +279,11 @@ func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (i
 	seen := map[string]bool{}
 	results, err := r.Syncer.Sync(ctx, src, issues)
 	if results == nil && err != nil {
-		return 0, errors.Join(append(errs, err)...)
+		return 0, err
 	}
-	errs = append(errs, err)
+	if err != nil {
+		itemErrs = append(itemErrs, err)
+	}
 	for i, res := range results {
 		seen[v1.PostName(issues[i].Org, issues[i].Repo, issues[i].Number)] = true
 		if res == "" {
@@ -213,12 +298,12 @@ func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (i
 
 	var posts v1.PostList
 	if err := r.Syncer.reader().List(ctx, &posts); err != nil {
-		return synced, errors.Join(append(errs, fmt.Errorf("listing posts: %w", err))...)
+		return synced, fmt.Errorf("listing posts: %w", err)
 	}
 	prefix := strings.ToLower(gh.Org) + "."
 	for i := range posts.Items {
 		p := &posts.Items[i]
-		if seen[p.Name] || p.DeletionTimestamp != nil || !ownedBy(p, gh.Org, prefix) {
+		if seen[p.Name] || p.DeletionTimestamp != nil || p.Status.MergedInto != "" || !ownedBy(p, gh.Org, prefix) {
 			continue
 		}
 		repo, number, ok := IssueRef(p)
@@ -233,7 +318,7 @@ func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (i
 		}
 		if err != nil {
 			count("failed")
-			errs = append(errs, err)
+			itemErrs = append(itemErrs, err)
 			continue
 		}
 		count(res)
@@ -241,7 +326,10 @@ func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (i
 			synced++
 		}
 	}
-	return synced, errors.Join(errs...)
+	if len(itemErrs) > 0 {
+		return synced, &ItemsFailedError{Err: errors.Join(itemErrs...)}
+	}
+	return synced, nil
 }
 
 // ownedBy reports whether a post is for an issue in org.

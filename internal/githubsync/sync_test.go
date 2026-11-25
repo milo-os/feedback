@@ -87,6 +87,8 @@ type fakeGitHub struct {
 	fail     map[string]error
 	searches int
 	rate     *github.RateLimit
+	// projectRate is the rate limit of the project owner's installation.
+	projectRate *github.RateLimit
 	// unreturned are issue IDs ProjectItems leaves out, as when the project
 	// owner's installation can't find them.
 	unreturned map[string]bool
@@ -168,10 +170,21 @@ func (f *fakeGitHub) SearchIssues(_ context.Context, _ int64, query, _ string, _
 	return out, f.searchErr
 }
 
-func (f *fakeGitHub) RateLimit(int64) *github.RateLimit {
+// projectInstallation is the installation the fake has on every org but
+// the sources' own.
+const projectInstallation = 99
+
+func (f *fakeGitHub) RateLimit(id int64) *github.RateLimit {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if id == projectInstallation {
+		return f.projectRate
+	}
 	return f.rate
+}
+
+func (f *fakeGitHub) InstallationID(context.Context, string) (int64, error) {
+	return projectInstallation, nil
 }
 
 func testSource() *v1.FeedbackSource {

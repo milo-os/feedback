@@ -10,9 +10,11 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -153,7 +155,7 @@ func TestSweepKeepsPostsOnErrors(t *testing.T) {
 	gh := newFakeGitHub()
 	src := sweepSource(t, c)
 	s := newSyncer(c, gh)
-	r := &SourceReconciler{Client: c, Syncer: s}
+	r := &SourceReconciler{Client: c, Syncer: s, Interval: 7 * time.Minute, Retry: 45 * time.Second}
 	is := sweepIssue(t, src, "enhancements", 1)
 	gh.put(is)
 	syncIssue(t, s, src, is, Created)
@@ -161,11 +163,116 @@ func TestSweepKeepsPostsOnErrors(t *testing.T) {
 	k := key(is.Org, is.Repo, is.Number)
 	gh.unindexed[k] = true
 	gh.fail[k] = errors.New("GitHub GraphQL: 502 Bad Gateway")
-	_, got := reconcileSource(t, r, src)
+	res, got := reconcileSource(t, r, src)
 	getPost(t, c, v1.PostName(is.Org, is.Repo, is.Number))
 	ready := meta.FindStatusCondition(got.Status.Conditions, v1.FeedbackSourceConditionReady)
 	if ready == nil || ready.Reason != v1.FeedbackSourceReasonSyncFailed {
 		t.Errorf("Ready = %+v, want SyncFailed", ready)
+	}
+	// One issue failing waits for the next sweep, rather than sweeping the
+	// whole source again in a minute.
+	if res.RequeueAfter != 7*time.Minute {
+		t.Errorf("RequeueAfter = %v, want the interval", res.RequeueAfter)
+	}
+}
+
+// TestSweepRetriesOnlyTheStatus: when a finished sweep's status can't be
+// written, the retry writes it without sweeping again.
+func TestSweepRetriesOnlyTheStatus(t *testing.T) {
+	c := milo(t)
+	wc, err := client.NewWithWatch(envCfg.Config, client.Options{Scheme: scheme})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failNext := true
+	flaky := interceptor.NewClient(wc, interceptor.Funcs{
+		SubResourceApply: func(ctx context.Context, c client.Client, sub string, obj runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
+			if failNext {
+				failNext = false
+				return errors.New("the API server is unhappy")
+			}
+			return c.SubResource(sub).Apply(ctx, obj, opts...)
+		},
+	})
+	gh := newFakeGitHub()
+	src := sweepSource(t, c)
+	s := newSyncer(c, gh)
+	r := &SourceReconciler{Client: flaky, Syncer: s, Interval: 7 * time.Minute, Retry: 45 * time.Second}
+	gh.put(sweepIssue(t, src, "enhancements", 1))
+
+	res, got := reconcileSource(t, r, src)
+	if res.RequeueAfter != 45*time.Second || got.Status.LastReconcile != nil {
+		t.Fatalf("after a failed status write: RequeueAfter = %v, lastReconcile %+v; want a retry and no status", res.RequeueAfter, got.Status.LastReconcile)
+	}
+	searches := gh.searches
+	res, got = reconcileSource(t, r, src)
+	if gh.searches != searches {
+		t.Error("the retry swept again")
+	}
+	if lr := got.Status.LastReconcile; lr == nil || lr.PostsSynced != 1 {
+		t.Errorf("lastReconcile = %+v, want the finished sweep's", lr)
+	}
+	if res.RequeueAfter != 7*time.Minute {
+		t.Errorf("RequeueAfter = %v, want the rest of the interval", res.RequeueAfter)
+	}
+}
+
+// TestSweepLeavesMergedPosts: a transferred issue's old post isn't re-read
+// on every sweep or counted as synced.
+func TestSweepLeavesMergedPosts(t *testing.T) {
+	c := milo(t)
+	gh := newFakeGitHub()
+	src := sweepSource(t, c)
+	s := newSyncer(c, gh)
+	r := &SourceReconciler{Client: c, Syncer: s}
+	is := sweepIssue(t, src, "enhancements", 1)
+	gh.put(is)
+	syncIssue(t, s, src, is, Created)
+
+	moved := *is
+	moved.Number, moved.ID = 2, key(is.Org, is.Repo, 2)
+	gh.put(&moved)
+	old := key(is.Org, is.Repo, is.Number)
+	gh.mu.Lock()
+	gh.issues[old] = &moved
+	gh.mu.Unlock()
+	syncIssue(t, s, src, is, Moved)
+
+	gh.fail[old] = errors.New("re-read the merged post")
+	_, got := reconcileSource(t, r, src)
+	ready := meta.FindStatusCondition(got.Status.Conditions, v1.FeedbackSourceConditionReady)
+	if ready == nil || ready.Status != metav1.ConditionTrue {
+		t.Errorf("Ready = %+v, want True", ready)
+	}
+	if lr := got.Status.LastReconcile; lr == nil || lr.PostsSynced != 1 {
+		t.Errorf("lastReconcile = %+v, want only the new post counted", lr)
+	}
+	if p := getPost(t, c, v1.PostName(is.Org, is.Repo, is.Number)); p.Status.MergedInto == "" {
+		t.Error("the old post is no longer merged")
+	}
+}
+
+// TestSweepChecksTheProjectOwner: with the project in another
+// org, the owner's installation's rate limit counts too.
+func TestSweepChecksTheProjectOwner(t *testing.T) {
+	c := milo(t)
+	gh := newFakeGitHub()
+	src := sweepSource(t, c)
+	src.Spec.GitHub.Project.Owner = "datum-cloud"
+	if err := c.Update(context.Background(), src); err != nil {
+		t.Fatal(err)
+	}
+	s := newSyncer(c, gh)
+	gh.projectRate = &github.RateLimit{Limit: 5000, Remaining: 10, ResetAt: s.Now().Add(20 * time.Minute)}
+	r := &SourceReconciler{Client: c, Syncer: s}
+
+	res, got := reconcileSource(t, r, src)
+	if gh.searches != 0 || res.RequeueAfter < 20*time.Minute || res.RequeueAfter > 21*time.Minute {
+		t.Errorf("searched %d times, RequeueAfter = %v; want to wait for the owner's reset", gh.searches, res.RequeueAfter)
+	}
+	ready := meta.FindStatusCondition(got.Status.Conditions, v1.FeedbackSourceConditionReady)
+	if ready == nil || ready.Reason != v1.FeedbackSourceReasonRateLimited || !strings.Contains(ready.Message, "datum-cloud") {
+		t.Errorf("Ready = %+v, want RateLimited naming datum-cloud", ready)
 	}
 }
 

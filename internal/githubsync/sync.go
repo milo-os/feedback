@@ -41,6 +41,8 @@ type GitHub interface {
 	// RateLimit is the installation's rate limit after its last request,
 	// or nil before any.
 	RateLimit(installationID int64) *github.RateLimit
+	// InstallationID returns the app's installation on org.
+	InstallationID(ctx context.Context, org string) (int64, error)
 }
 
 // App adapts a github.App to GitHub.
