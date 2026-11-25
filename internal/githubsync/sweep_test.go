@@ -250,6 +250,78 @@ func TestSweepLeavesMergedPosts(t *testing.T) {
 	if p := getPost(t, c, v1.PostName(is.Org, is.Repo, is.Number)); p.Status.MergedInto == "" {
 		t.Error("the old post is no longer merged")
 	}
+
+	// The new location stops matching, so its post goes. The old post would
+	// point at nothing; it's re-read and deleted too.
+	delete(gh.fail, old)
+	gone := moved
+	gone.Labels, gone.IssueType = nil, ""
+	gh.put(&gone)
+	gh.mu.Lock()
+	gh.issues[old] = &gone
+	gh.mu.Unlock()
+	_, got = reconcileSource(t, r, src)
+	wantGone(t, c, v1.PostName(moved.Org, moved.Repo, moved.Number))
+	wantGone(t, c, v1.PostName(is.Org, is.Repo, is.Number))
+	if ready := meta.FindStatusCondition(got.Status.Conditions, v1.FeedbackSourceConditionReady); ready == nil || ready.Status != metav1.ConditionTrue {
+		t.Errorf("Ready = %+v, want True", ready)
+	}
+}
+
+// TestSweepStatusStuck: a status write that keeps
+// failing past the next sweep's due time sweeps again, and is always
+// requeued.
+func TestSweepStatusStuck(t *testing.T) {
+	c := milo(t)
+	wc, err := client.NewWithWatch(envCfg.Config, client.Options{Scheme: scheme})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := interceptor.NewClient(wc, interceptor.Funcs{
+		SubResourceApply: func(context.Context, client.Client, string, runtime.ApplyConfiguration, ...client.SubResourceApplyOption) error {
+			return errors.New("the API server is unhappy")
+		},
+	})
+	gh := newFakeGitHub()
+	src := sweepSource(t, c)
+	s := newSyncer(c, gh)
+	now := s.Now()
+	s.Now = func() time.Time { return now }
+	r := &SourceReconciler{Client: broken, Syncer: s, Interval: 7 * time.Minute, Retry: 45 * time.Second}
+
+	for i, step := range []time.Duration{0, 6*time.Minute + 50*time.Second, 10 * time.Second} {
+		now = now.Add(step)
+		res, _ := reconcileSource(t, r, src)
+		if res.RequeueAfter <= 0 {
+			t.Fatalf("reconcile %d: RequeueAfter = %v; it would never run again", i, res.RequeueAfter)
+		}
+	}
+	// The last reconcile came after the next sweep was due, so it swept.
+	if gh.searches != 2*len(SearchQueries(&src.Spec.GitHub)) {
+		t.Errorf("searches = %d, want two sweeps' worth", gh.searches)
+	}
+}
+
+// TestSweepNoOwnerInstall: a sweep that can't find the
+// project owner's installation fails before searching.
+func TestSweepNoOwnerInstall(t *testing.T) {
+	c := milo(t)
+	gh := newFakeGitHub()
+	gh.noProjectInstallation = true
+	src := sweepSource(t, c)
+	src.Spec.GitHub.Project.Owner = "datum-cloud"
+	if err := c.Update(context.Background(), src); err != nil {
+		t.Fatal(err)
+	}
+	r := &SourceReconciler{Client: c, Syncer: newSyncer(c, gh), Retry: 45 * time.Second}
+	res, got := reconcileSource(t, r, src)
+	if gh.searches != 0 || res.RequeueAfter != 45*time.Second {
+		t.Errorf("searched %d times, RequeueAfter = %v; want no search and a retry", gh.searches, res.RequeueAfter)
+	}
+	ready := meta.FindStatusCondition(got.Status.Conditions, v1.FeedbackSourceConditionReady)
+	if ready == nil || ready.Reason != v1.FeedbackSourceReasonSyncFailed || !strings.Contains(ready.Message, "datum-cloud") {
+		t.Errorf("Ready = %+v, want SyncFailed naming datum-cloud", ready)
+	}
 }
 
 // TestSweepChecksTheProjectOwner: with the project in another

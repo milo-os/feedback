@@ -117,11 +117,24 @@ func (r *SourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 	now := r.Syncer.now()
-	if u, ok := r.takeUnwritten(src.Name); ok && u.generation == src.Generation {
+	if u, ok := r.takeUnwritten(src.Name); ok && u.generation == src.Generation && now.Before(u.next) {
 		return r.finish(ctx, &src, u)
 	}
 
-	for _, inst := range r.installations(ctx, &src) {
+	insts, err := r.installations(ctx, &src)
+	if err != nil {
+		// Without the project owner's installation the sweep can't read
+		// project Status, so don't spend a search finding that out.
+		log.Error(err, "Sweep can't start")
+		r.logStatusError(ctx, r.writeStatus(ctx, &src, metav1.Condition{
+			Type:    v1.FeedbackSourceConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  v1.FeedbackSourceReasonSyncFailed,
+			Message: truncate(err.Error(), maxMessage),
+		}, nil))
+		return ctrl.Result{RequeueAfter: r.retry()}, nil
+	}
+	for _, inst := range insts {
 		if rl := r.Syncer.GitHub.RateLimit(inst.id); rl != nil && rl.Remaining < r.minRateLimit() && now.Before(rl.ResetAt) {
 			log.Info("Waiting for the GitHub rate limit to reset", "org", inst.org, "remaining", rl.Remaining, "resetAt", rl.ResetAt)
 			return r.waitForRateLimit(ctx, &src, rl.ResetAt,
@@ -149,7 +162,12 @@ func (r *SourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// the next sweep, not by sweeping the whole source again now.
 		log.Error(sweepErr, "Some issues failed to sync", "postsSynced", synced)
 		failed.Message = truncate(sweepErr.Error(), maxMessage)
-		return r.finish(ctx, &src, unwrittenStatus{generation: src.Generation, ready: failed, next: r.Syncer.now().Add(r.interval())})
+		return r.finish(ctx, &src, unwrittenStatus{
+			generation: src.Generation,
+			ready:      failed,
+			completed:  &v1.ReconcileStatus{CompletedAt: metav1.NewTime(r.Syncer.now().UTC().Truncate(time.Second)), PostsSynced: int32(synced)},
+			next:       r.Syncer.now().Add(r.interval()),
+		})
 	}
 	if sweepErr != nil {
 		// Search or listing posts failed, so the sweep didn't get far.
@@ -174,8 +192,10 @@ func (r *SourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 // finish writes the status of a finished sweep and requeues the source for
 // its next sweep. When the write fails, the status is kept and written on a
-// retry soon, without sweeping again. Returning the error instead would make
-// controller-runtime retry within milliseconds, ignoring RequeueAfter.
+// retry soon, without sweeping again, until the next sweep is due.
+// Returning the error instead would make controller-runtime retry within
+// milliseconds, ignoring RequeueAfter. RequeueAfter is never zero: a zero
+// result with no error isn't requeued at all.
 func (r *SourceReconciler) finish(ctx context.Context, src *v1.FeedbackSource, st unwrittenStatus) (ctrl.Result, error) {
 	if err := r.writeStatus(ctx, src, st.ready, st.completed); err != nil {
 		r.logStatusError(ctx, err)
@@ -185,7 +205,7 @@ func (r *SourceReconciler) finish(ctx context.Context, src *v1.FeedbackSource, s
 		}
 		r.unwritten[src.Name] = st
 		r.mu.Unlock()
-		return ctrl.Result{RequeueAfter: min(r.retry(), max(st.next.Sub(r.Syncer.now()), 0))}, nil
+		return ctrl.Result{RequeueAfter: max(min(r.retry(), st.next.Sub(r.Syncer.now())), time.Second)}, nil
 	}
 	return ctrl.Result{RequeueAfter: max(st.next.Sub(r.Syncer.now()), time.Second)}, nil
 }
@@ -205,19 +225,17 @@ type installation struct {
 
 // installations are the installations a sweep of the source spends: its
 // own, and the project owner's when the project is in another org.
-func (r *SourceReconciler) installations(ctx context.Context, src *v1.FeedbackSource) []installation {
+func (r *SourceReconciler) installations(ctx context.Context, src *v1.FeedbackSource) ([]installation, error) {
 	gh := src.Spec.GitHub
 	out := []installation{{org: gh.Org, id: gh.InstallationID}}
 	if p := gh.Project; p != nil && !strings.EqualFold(p.Owner, gh.Org) {
 		id, err := r.Syncer.GitHub.InstallationID(ctx, p.Owner)
 		if err != nil {
-			// Reading the project fails the same way; the sweep reports it.
-			logf.FromContext(ctx).Error(err, "Finding the project owner's installation", "org", p.Owner)
-		} else {
-			out = append(out, installation{org: p.Owner, id: id})
+			return nil, fmt.Errorf("finding the app's installation on %s, which owns the project: %w", p.Owner, err)
 		}
+		out = append(out, installation{org: p.Owner, id: id})
 	}
-	return out
+	return out, nil
 }
 
 // waitForRateLimit reports that the source is waiting for GitHub's rate
@@ -250,8 +268,9 @@ func (r *SourceReconciler) logStatusError(ctx context.Context, err error) {
 // return is re-read on its own before anything is deleted. When GitHub
 // refuses some search results, the rest are still synced. Failures of single
 // issues or posts are returned as an *ItemsFailedError once the sweep has
-// finished. A rate limit stops the sweep where it is. Posts marked merged
-// into another (a transferred issue's old post) are left alone.
+// finished. A rate limit stops the sweep where it is. A post merged into
+// another that exists (a transferred issue's old post) is left alone; one
+// merged into a post that's gone is re-read, so it's deleted or re-marked.
 func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (int, error) {
 	gh := src.Spec.GitHub
 	count := func(res Result) { syncedPosts.WithLabelValues(src.Name, string(res)).Inc() }
@@ -300,10 +319,16 @@ func (r *SourceReconciler) Sweep(ctx context.Context, src *v1.FeedbackSource) (i
 	if err := r.Syncer.reader().List(ctx, &posts); err != nil {
 		return synced, fmt.Errorf("listing posts: %w", err)
 	}
+	exists := make(map[string]bool, len(posts.Items))
+	for i := range posts.Items {
+		if posts.Items[i].DeletionTimestamp == nil {
+			exists[posts.Items[i].Name] = true
+		}
+	}
 	prefix := strings.ToLower(gh.Org) + "."
 	for i := range posts.Items {
 		p := &posts.Items[i]
-		if seen[p.Name] || p.DeletionTimestamp != nil || p.Status.MergedInto != "" || !ownedBy(p, gh.Org, prefix) {
+		if seen[p.Name] || p.DeletionTimestamp != nil || exists[p.Status.MergedInto] || !ownedBy(p, gh.Org, prefix) {
 			continue
 		}
 		repo, number, ok := IssueRef(p)

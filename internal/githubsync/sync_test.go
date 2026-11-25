@@ -89,6 +89,9 @@ type fakeGitHub struct {
 	rate     *github.RateLimit
 	// projectRate is the rate limit of the project owner's installation.
 	projectRate *github.RateLimit
+	// noProjectInstallation makes InstallationID fail, as when the app isn't
+	// installed on the project owner's org.
+	noProjectInstallation bool
 	// unreturned are issue IDs ProjectItems leaves out, as when the project
 	// owner's installation can't find them.
 	unreturned map[string]bool
@@ -183,7 +186,12 @@ func (f *fakeGitHub) RateLimit(id int64) *github.RateLimit {
 	return f.rate
 }
 
-func (f *fakeGitHub) InstallationID(context.Context, string) (int64, error) {
+func (f *fakeGitHub) InstallationID(_ context.Context, org string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.noProjectInstallation {
+		return 0, fmt.Errorf("GET /orgs/%s/installation: 404 Not Found", org)
+	}
 	return projectInstallation, nil
 }
 
