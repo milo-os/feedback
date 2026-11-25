@@ -510,6 +510,52 @@ func TestSyncTransferredOutOfTheSource(t *testing.T) {
 	}
 }
 
+// TestSyncTransferredWithNoOldPost: with no old post to mark, SyncIssue
+// reports what happened at the new location.
+func TestSyncTransferredWithNoOldPost(t *testing.T) {
+	c := milo(t)
+	gh := newFakeGitHub()
+	s := newSyncer(c, gh)
+	is := testIssue(t, 1)
+	moved := *is
+	moved.Number = 2
+	gh.put(&moved)
+	gh.mu.Lock()
+	gh.issues[key(is.Org, is.Repo, is.Number)] = &moved
+	gh.mu.Unlock()
+	syncIssue(t, s, testSource(), is, Created)
+	getPost(t, c, v1.PostName(moved.Org, moved.Repo, moved.Number))
+	wantGone(t, c, v1.PostName(is.Org, is.Repo, is.Number))
+}
+
+// TestSyncTransferredToAnOrgThatExcludesIt: the other org has a source, but
+// it doesn't include the issue, so the old post is deleted.
+func TestSyncTransferredToAnOrgThatExcludesIt(t *testing.T) {
+	c := milo(t)
+	gh := newFakeGitHub()
+	s := newSyncer(c, gh)
+	datumCloud := testSource()
+	datumCloud.Spec.GitHub.Repositories.Exclude = []string{"*"}
+	if err := c.Create(context.Background(), datumCloud); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.Delete(context.Background(), datumCloud) })
+	miloOS := testSource()
+	miloOS.Spec.GitHub.Org = "milo-os"
+	is := testIssue(t, 1)
+	is.Org = "milo-os"
+	gh.put(is)
+	syncIssue(t, s, miloOS, is, Created)
+
+	moved := *is
+	moved.Org = "datum-cloud"
+	gh.mu.Lock()
+	gh.issues[key(is.Org, is.Repo, is.Number)] = &moved
+	gh.mu.Unlock()
+	syncIssue(t, s, miloOS, is, Deleted)
+	wantGone(t, c, v1.PostName(is.Org, is.Repo, is.Number))
+}
+
 // TestSyncBatchWithAFailure: one issue failing doesn't stop the others.
 func TestSyncBatchWithAFailure(t *testing.T) {
 	milo(t)
