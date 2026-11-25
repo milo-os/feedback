@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/yaml"
 )
 
@@ -85,5 +86,21 @@ func TestAppID(t *testing.T) {
 		if got != c.want || (err == nil) != c.ok {
 			t.Errorf("appID(%d) with GITHUB_APP_ID=%q = %d, %v", c.flag, c.env, got, err)
 		}
+	}
+}
+
+func TestLeaseConfig(t *testing.T) {
+	inCluster := &rest.Config{Host: "https://kubernetes.default.svc"}
+	found := func() (*rest.Config, error) { return inCluster, nil }
+	missing := func() (*rest.Config, error) { return nil, rest.ErrNotInCluster }
+
+	if cfg, err := leaseConfig(true, found); err != nil || cfg != inCluster {
+		t.Errorf("leaseConfig(true, in cluster) = %v, %v", cfg, err)
+	}
+	if _, err := leaseConfig(true, missing); err == nil {
+		t.Error("leaseConfig(true, not in cluster): want an error, not a lease in Milo")
+	}
+	if cfg, err := leaseConfig(false, missing); err != nil || cfg != nil {
+		t.Errorf("leaseConfig(false) = %v, %v; want nothing", cfg, err)
 	}
 }

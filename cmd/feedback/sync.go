@@ -101,6 +101,19 @@ func privateKey(file string) ([]byte, error) {
 	return nil, errors.New("no GitHub App private key: set --github-app-private-key-file or GITHUB_APP_PRIVATE_KEY")
 }
 
+// leaseConfig is the config for the leader-election lease, which lives in
+// the cluster feedback-sync runs in: it has no lease RBAC in Milo.
+func leaseConfig(leaderElect bool, inCluster func() (*rest.Config, error)) (*rest.Config, error) {
+	if !leaderElect {
+		return nil, nil
+	}
+	cfg, err := inCluster()
+	if err != nil {
+		return nil, fmt.Errorf("--leader-elect needs an in-cluster config, for a lease in the cluster feedback-sync runs in: %w", err)
+	}
+	return cfg, nil
+}
+
 func runSync(o syncOptions) error {
 	log := ctrl.Log.WithName("setup")
 	i := version.Get()
@@ -123,10 +136,9 @@ func runSync(o syncOptions) error {
 	if err != nil {
 		return fmt.Errorf("loading Milo config: %w", err)
 	}
-	// The lease lives where sync runs, not in Milo.
-	localConfig, err := rest.InClusterConfig()
+	leaseCfg, err := leaseConfig(o.leaderElect, rest.InClusterConfig)
 	if err != nil {
-		localConfig = miloConfig
+		return err
 	}
 	mgr, err := ctrl.NewManager(miloConfig, ctrl.Options{
 		Scheme:                        scheme,
@@ -135,7 +147,7 @@ func runSync(o syncOptions) error {
 		LeaderElection:                o.leaderElect,
 		LeaderElectionID:              "sync.feedback.miloapis.com",
 		LeaderElectionNamespace:       o.leaderElectionNamespace,
-		LeaderElectionConfig:          localConfig,
+		LeaderElectionConfig:          leaseCfg,
 		LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
