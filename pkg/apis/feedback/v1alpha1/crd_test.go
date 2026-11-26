@@ -172,6 +172,30 @@ func TestCRDs(t *testing.T) {
 		expectInvalid(t, c.Update(ctx, s), "can't be changed after they are sent")
 	})
 
+	t.Run("feedback sources are named after their org", func(t *testing.T) {
+		src := func(name, org string) *v1.FeedbackSource {
+			return &v1.FeedbackSource{
+				ObjectMeta: metav1.ObjectMeta{Name: name},
+				Spec: v1.FeedbackSourceSpec{GitHub: v1.GitHubSource{
+					Org: org, InstallationID: 1, Issues: v1.IssueSelector{Labels: []string{"Build"}},
+				}},
+			}
+		}
+		expectInvalid(t, c.Create(ctx, src("other", "Example-Org")), "one source per org")
+		if err := c.Create(ctx, src("example-org", "Example-Org")); err != nil {
+			t.Fatal(err)
+		}
+		empty := src("empty-org", "empty-org")
+		empty.Spec.GitHub.Issues = v1.IssueSelector{ExcludeLabels: []string{"feedback:hide"}}
+		expectInvalid(t, c.Create(ctx, empty), "at least one issue type or label")
+		quoted := src("quoted-org", "quoted-org")
+		quoted.Spec.GitHub.Issues.Labels = []string{`say "hi"`}
+		expectInvalid(t, c.Create(ctx, quoted), "spec.github.issues.labels")
+		glob := src("glob-org", "glob-org")
+		glob.Spec.GitHub.Repositories.Exclude = []string{"foo label:x"}
+		expectInvalid(t, c.Create(ctx, glob), "spec.github.repositories.exclude")
+	})
+
 	t.Run("profiles are named after their user", func(t *testing.T) {
 		p := &v1.FeedbackProfile{ObjectMeta: metav1.ObjectMeta{Name: "u9"}, Spec: v1.FeedbackProfileSpec{UserRef: v1.UserReference{Name: "u8"}}}
 		expectInvalid(t, c.Create(ctx, p), "must be the user's name")

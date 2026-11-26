@@ -7,7 +7,7 @@ posts synced from GitHub, votes, submissions, security reports, releases and
 changelog entries. They are CRDs installed in Milo, like billing's, so the
 website, cloud portal, `datumctl`, Patch and the staff portal all use Milo's
 API. The `feedback` operator reconciles them and serves their admission
-webhooks.
+webhooks, and `feedback sync` turns public GitHub issues into posts.
 
 - Product: [Platform Feedback](https://github.com/datum-cloud/enhancements/blob/main/enhancements/platform/feedback/README.md)
 - Design: [Platform Feedback: Architecture](https://github.com/datum-cloud/enhancements/pull/925)
@@ -18,8 +18,10 @@ webhooks.
 
 The CRDs are defined. The operator sets owners and reviewers in admission,
 reconciles votes, follows, submission reviews and security reports, and
-stores attachments. Activity and search are configured. Triage,
-notifications and digests are tracked as sub-issues of the epic.
+stores attachments. Activity and search are configured. `feedback-sync`
+syncs posts from GitHub issues on a periodic sweep. Webhooks, releases and
+changelog entries, write-back, delivery tracking, triage, notifications and
+digests are tracked as sub-issues of the epics.
 
 | Resource | Who writes it | Who reads it |
 | --- | --- | --- |
@@ -68,6 +70,49 @@ decided on a `SubmissionReview`.
   - `Merged` has the submitter follow (`reason: merged`) and vote on the post.
   - `Approved` waits until feedback-sync creates the GitHub issue and syncs a post annotated `feedback.miloapis.com/submission: <name>`. It then links the submission to that post and has the submitter follow (`reason: submitted`) and vote.
   - The `Applied` condition and `status.applied` record when the decision has been fully carried out.
+
+## GitHub sync
+
+`feedback sync` (the `feedback-sync` Deployment) turns public GitHub issues
+into posts, as the "Datum Cloud Feedback" GitHub App. Each `FeedbackSource`
+names one org and its installation, and is named after the org, so there is
+one per org: a sweep treats every post of its org as its own.
+
+- **Sweep.** Each source is swept when it is created or its spec changes, and
+  then every `--sweep-interval` (10 minutes). A sweep runs two GraphQL
+  searches, one for the source's issue types and one for its labels, then
+  syncs every issue found. It re-reads each of the org's posts the searches
+  didn't return before deleting any, since search lags and can miss issues.
+  With fewer than `--min-rate-limit` GitHub API points left, it waits for the
+  limit to reset.
+- **Per item.** `githubsync.Syncer.SyncIssue` re-reads one issue and makes
+  its post match. Sweeps use it, and the webhook consumer will too.
+- **Filter.** An issue is included when it has any of the source's issue
+  types or labels, none of its excluded labels, and is in a public
+  repository its globs select.
+- **Map.** Status comes from the project's Status through `statusMapping`
+  (`""` for none), and from the issue state when it is closed: completed is
+  `shipped`, not planned or duplicate is `closed`. Categories come from
+  labels through `categoryMapping`. `bodyHTML` is sanitised against an
+  allow-list, with GitHub's expiring attachment URLs made permanent.
+- **Write.** A new post is created, then its labels (`feedback.miloapis.com/org`,
+  `/status`, one `category.feedback.miloapis.com/<category>` each) and its
+  GitHub fields in `status` are applied with server-side apply as
+  `feedback-sync`, only when they change. The operator's fields and staff's
+  `spec.hidden` are left alone. A post whose issue no longer matches is
+  deleted; the operator keeps its votes for 30 days. A transferred issue's
+  old post is closed and marked merged into the post for its new location,
+  so the operator moves its votes and follows there.
+- **Status.** Each source's `Ready` condition, `lastReconcile` and
+  `rateLimit` are applied as `feedback-sync`. `lastWebhookAt` will be
+  written by the webhook consumer under a field manager of its own.
+
+The environment provides the `feedback-github-app` Secret in
+`feedback-system`, with `app-id` and `private-key` (staging keeps them in
+Secret Manager as `feedback-github-app-id` and
+`feedback-github-app-private-key`). A milo-os issue on the datum-cloud
+Enhancements project has its Status read through the datum-cloud
+installation, since an installation can't see another org's projects.
 
 ## Attachments
 
@@ -163,11 +208,11 @@ client certificates and get Kubernetes RBAC in Milo (`config/milo/rbac`).
 ## Layout
 
 ```
-cmd/feedback/             operator, uploads and version commands
+cmd/feedback/             operator, sync, uploads and version commands
 internal/attachments/     the attachments bucket
 internal/controller/      reconcilers
 internal/github/          GitHub App auth and GraphQL reads of issues
-internal/githubsync/      which issues become posts, and how they map
+internal/githubsync/      which issues become posts, how they map, and the sweep that writes them
 internal/identity/        who a request comes from, from Milo's user info
 internal/index/           cache field indexes shared by reconcilers and webhooks
 internal/milo/            voter lookups in Milo
@@ -176,7 +221,7 @@ internal/uploads/         the feedback-uploads HTTP service
 internal/webhook/         admission webhooks Milo calls
 pkg/apis/feedback/        feedback.miloapis.com/v1alpha1 types (CRDs)
 config/crd/               generated CRDs, installed in Milo
-config/base/              operator and uploads Deployments, Services, leader election RBAC
+config/base/              operator, sync and uploads Deployments, Services, leader election RBAC
 config/components/        milo-integration: Milo kubeconfig, client and webhook certificates
 config/milo/              applied to Milo: IAM (iam/), RBAC for the service's
                           components (rbac/), webhook config (webhook/),

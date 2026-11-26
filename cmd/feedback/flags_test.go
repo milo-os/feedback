@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/yaml"
 )
 
@@ -64,5 +65,42 @@ func TestCheckUserCap(t *testing.T) {
 		if err := checkUserCap("uploads", c.perUser, c.replica); (err == nil) != c.ok {
 			t.Errorf("per user %d, replica %d: %v", c.perUser, c.replica, err)
 		}
+	}
+}
+
+func TestAppID(t *testing.T) {
+	for _, c := range []struct {
+		flag int64
+		env  string
+		want int64
+		ok   bool
+	}{
+		{flag: 7, env: "9", want: 7, ok: true},
+		{env: "5890001\n", want: 5890001, ok: true},
+		{env: " 12 ", want: 12, ok: true},
+		{env: ""},
+		{env: "abc"},
+	} {
+		t.Setenv("GITHUB_APP_ID", c.env)
+		got, err := appID(c.flag)
+		if got != c.want || (err == nil) != c.ok {
+			t.Errorf("appID(%d) with GITHUB_APP_ID=%q = %d, %v", c.flag, c.env, got, err)
+		}
+	}
+}
+
+func TestLeaseConfig(t *testing.T) {
+	inCluster := &rest.Config{Host: "https://kubernetes.default.svc"}
+	found := func() (*rest.Config, error) { return inCluster, nil }
+	missing := func() (*rest.Config, error) { return nil, rest.ErrNotInCluster }
+
+	if cfg, err := leaseConfig(true, found); err != nil || cfg != inCluster {
+		t.Errorf("leaseConfig(true, in cluster) = %v, %v", cfg, err)
+	}
+	if _, err := leaseConfig(true, missing); err == nil {
+		t.Error("leaseConfig(true, not in cluster): want an error, not a lease in Milo")
+	}
+	if cfg, err := leaseConfig(false, missing); err != nil || cfg != nil {
+		t.Errorf("leaseConfig(false) = %v, %v; want nothing", cfg, err)
 	}
 }

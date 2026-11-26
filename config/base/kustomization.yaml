@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - config.yaml
   - operator
+  - sync
   - uploads
 
 images:

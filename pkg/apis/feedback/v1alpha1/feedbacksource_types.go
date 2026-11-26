@@ -8,12 +8,14 @@ import (
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
 // +kubebuilder:metadata:annotations="discovery.miloapis.com/parent-contexts=Platform"
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == self.spec.github.org.lowerAscii()",message="metadata.name must be spec.github.org in lower case, so there is one source per org"
 // +kubebuilder:printcolumn:name="Org",type=string,JSONPath=`.spec.github.org`
 // +kubebuilder:printcolumn:name="Last reconcile",type=date,JSONPath=`.status.lastReconcile.completedAt`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // FeedbackSource configures what the feedback service syncs from one GitHub
-// organization and how GitHub fields map onto posts. There is one per org.
+// organization and how GitHub fields map onto posts. There is one per org,
+// named after it: a sweep treats every post of the org as its own.
 //
 // FeedbackSource is a Platform resource stored in etcd.
 type FeedbackSource struct {
@@ -40,6 +42,7 @@ type FeedbackSourceSpec struct {
 }
 
 // GitHubSource identifies a GitHub organization and the content to sync from it.
+// +kubebuilder:validation:XValidation:rule="has(self.issues) && ((has(self.issues.issueTypes) && size(self.issues.issueTypes) > 0) || (has(self.issues.labels) && size(self.issues.labels) > 0))",message="issues needs at least one issue type or label; a source that includes nothing would delete every post of the org"
 type GitHubSource struct {
 	// Org is the GitHub organization login.
 	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`
@@ -171,3 +174,19 @@ type FeedbackSourceList struct {
 
 	Items []FeedbackSource `json:"items"`
 }
+
+// FeedbackSource conditions and their reasons, written by feedback-sync.
+const (
+	// FeedbackSourceConditionReady is True when the last sweep synced every
+	// matching issue.
+	FeedbackSourceConditionReady = "Ready"
+
+	// FeedbackSourceReasonSynced: the last sweep finished without errors.
+	FeedbackSourceReasonSynced = "Synced"
+	// FeedbackSourceReasonSyncFailed: the last sweep couldn't read GitHub or
+	// write some posts; the message says what failed.
+	FeedbackSourceReasonSyncFailed = "SyncFailed"
+	// FeedbackSourceReasonRateLimited: the sweep is waiting for the
+	// installation's GitHub rate limit to reset.
+	FeedbackSourceReasonRateLimited = "RateLimited"
+)
