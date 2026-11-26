@@ -8,6 +8,7 @@ vars:
   CONTROLLER_TOOLS_VERSION: "v0.22.0"
   ENVTEST_VERSION: "release-0.25"
   ENVTEST_K8S_VERSION: "1.37.x"
+  # renovate: datasource=github-releases depName=kyverno/chainsaw
   CHAINSAW_VERSION: "v0.2.15"
   # End-to-end tests run in a kind cluster from datum-cloud/test-infra, with
   # Milo built from MILO_DIR (a checkout of milo-os/milo, by default a
